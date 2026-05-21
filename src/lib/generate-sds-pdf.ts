@@ -1,480 +1,470 @@
 /* ============================================================
- * Word to Amazon SDS Generator - PDF Generator
+ * SDS PDF Generator - Professional Layout
  *
- * Generates 16-section Safety Data Sheet PDFs using jspdf.
- *
- * Functions:
- *   - generate_product_sds_pdf()   → single product SDS
- *   - generate_package_sds_pdf()   → combined package PDF
- *   - generate_sds_zip_blob()      → ZIP with all PDFs
+ * Built with jsPDF + manual drawing for full control over:
+ * - Colored section headers (dark blue)
+ * - Light-blue table backgrounds
+ * - Proper headers & footers on every page
+ * - Image embedding (stamp/signature)
  * ============================================================ */
 
 import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
 import JSZip from "jszip";
 import { PDFDocument } from "pdf-lib";
-import type {
-  ParsedProduct,
-  SdsSettings,
-  Ingredient,
-} from "@/lib/types";
+import type { ParsedProduct, SdsSettings } from "@/lib/types";
 
-/* ════════════════════════════════════════════════════════
-   CONSTANTS
-   ════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════
+   CONSTANTS – Page & Colors
+   ════════════════════════════════════════════════ */
 
-const PAGE_W = 612; // Letter width (points)
-const PAGE_H = 792; // Letter height
-const MARGIN = 54;  // 0.75 inch
-const CONTENT_W = PAGE_W - MARGIN * 2; // 504
+const W = 612;
+const H = 792;
+const M = 40;              // horizontal margin
+const HEADER_H = 36;
+const FOOTER_H = 28;
+const BODY_TOP = HEADER_H + 6;
+const BODY_BOTTOM = FOOTER_H + 10;
+const CONTENT_W = W - M * 2;
 
-const COLOR_DARK_BLUE = [26, 58, 92] as const;
-const COLOR_LIGHT_BLUE = [208, 228, 245] as const;
-const COLOR_GREEN = [46, 125, 50] as const;
-const COLOR_GREEN_BG = [232, 245, 233] as const;
-const COLOR_RED = [198, 40, 40] as const;
-const COLOR_GRAY = [100, 100, 100] as const;
+const DARK_BLUE: [number, number, number] = [0.10, 0.23, 0.36];
+const LIGHT_BLUE: [number, number, number] = [0.82, 0.90, 0.96];
+const LIGHT_BLUE_ALT: [number, number, number] = [0.88, 0.93, 0.97];
+const GREEN_BG: [number, number, number] = [0.91, 0.96, 0.91];
+const GREEN_TEXT: [number, number, number] = [0.18, 0.49, 0.20];
+const RED_TEXT: [number, number, number] = [0.78, 0.16, 0.16];
+const GRAY: [number, number, number] = [0.40, 0.40, 0.40];
+const BORDER_COLOR: [number, number, number] = [0.65, 0.70, 0.75];
 
-const FONT_NORMAL = "helvetica";
-const FONT_BOLD = "helvetica";
-const FONT_SIZE_TITLE = 18;
-const FONT_SIZE_SECTION = 11;
-const FONT_SIZE_BODY = 8;
-const FONT_SIZE_SMALL = 7;
+/* ════════════════════════════════════════════════════
+   PAGE CONTEXT – manages pages, headers, footers
+   ════════════════════════════════════════════════════ */
 
-/* ════════════════════════════════════════════════════════
-   VALIDATION
-   ════════════════════════════════════════════════════════ */
+class PageContext {
+  doc: jsPDF;
+  y: number;
+  page: number;
+  totalPages: number;
+  productName: string;
+  version: string;
+  date: string;
+  supplier: string;
 
-const PLACEHOLDER_PATTERNS = [
-  /liquid\s*component\s*\d/i,
-  /to\s*be\s*confirmed/i,
-  /supplier\s*confirmation/i,
-  /\bTBC\b/i,
-];
-
-export interface ValidationResult {
-  valid: boolean;
-  errors: string[];
-}
-
-/** Validate all data before generating PDFs */
-export function validate_for_generation(
-  products: ParsedProduct[],
-  settings: SdsSettings
-): ValidationResult {
-  const errors: string[] = [];
-
-  for (const p of products) {
-    const name = p.product_name.trim();
-    if (!name) {
-      errors.push(`${p.section}: Product name is empty`);
-    }
-    if (p.ingredients.length === 0) {
-      errors.push(`${p.section}: No ingredients`);
-    }
-    if (Math.abs(p.percentage_total - 100) > 0.01) {
-      errors.push(
-        `${p.section}: Total is ${p.percentage_total}% (must be 100%)`
-      );
-    }
-    // Check for placeholder text in ingredient names
-    for (const ing of p.ingredients) {
-      for (const pat of PLACEHOLDER_PATTERNS) {
-        if (pat.test(ing.chemical_composition)) {
-          errors.push(
-            `${p.section}: Ingredient "${ing.chemical_composition}" contains placeholder text`
-          );
-        }
-      }
-    }
+  constructor(
+    doc: jsPDF, productName: string,
+    version: string, date: string, supplier: string, totalPages: number
+  ) {
+    this.doc = doc;
+    this.page = 1;
+    this.totalPages = totalPages;
+    this.productName = productName;
+    this.version = version;
+    this.date = date;
+    this.supplier = supplier;
+    this.y = BODY_TOP;
+    this.drawHeader();
+    this.drawFooter();
   }
 
-  // Check supplier name consistency
-  const sup = settings.kit_info.supplier_name.trim();
-  if (!sup) {
-    errors.push("Supplier Name is empty");
+  drawHeader() {
+    const d = this.doc;
+    // Background
+    d.setFillColor(...DARK_BLUE);
+    d.rect(0, 0, W, HEADER_H, "F");
+    // Text
+    d.setTextColor(255, 255, 255);
+    d.setFont("helvetica", "bold");
+    d.setFontSize(9);
+    d.text("SAFETY DATA SHEET", M, 14);
+    d.setFont("helvetica", "normal");
+    d.setFontSize(8);
+    const pn = this.productName.length > 50 ? this.productName.slice(0, 50) + "..." : this.productName;
+    d.text(pn, W / 2, 14, { align: "center" });
+    d.setFontSize(7);
+    d.text("GHS/UN 16th Edition (2026)", W - M, 14, { align: "right" });
+    d.text(`Page ${this.page} of ${this.totalPages}`, W - M, 24, { align: "right" });
+    // Bottom line
+    d.setDrawColor(...LIGHT_BLUE);
+    d.setLineWidth(1.5);
+    d.line(M, HEADER_H, W - M, HEADER_H);
   }
 
-  return { valid: errors.length === 0, errors };
+  drawFooter() {
+    const d = this.doc;
+    const y = H - FOOTER_H + 4;
+    d.setDrawColor(...LIGHT_BLUE);
+    d.setLineWidth(1.5);
+    d.line(M, y, W - M, y);
+    d.setTextColor(...GRAY);
+    d.setFont("helvetica", "normal");
+    d.setFontSize(6.5);
+    d.text(`Version ${this.version}`, M, y + 10);
+    d.text(`Date: ${this.date}`, M + 60, y + 10);
+    d.text(`Page ${this.page} of ${this.totalPages}`, W / 2, y + 10, { align: "center" });
+    const sup = `Supplier: ${this.supplier}`;
+    d.text(sup, W - M, y + 10, { align: "right" });
+  }
+
+  addPage() {
+    this.page++;
+    this.doc.addPage();
+    this.y = BODY_TOP;
+    this.drawHeader();
+    this.drawFooter();
+  }
+
+  needSpace(h: number): boolean {
+    return this.y + h > H - BODY_BOTTOM;
+  }
+
+  ensureSpace(h: number) {
+    if (this.needSpace(h)) {
+      this.addPage();
+    }
+  }
 }
 
-/* ════════════════════════════════════════════════════════
-   HELPER – draw header and footer on each page
-   ════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════
+   DRAWING HELPERS
+   ════════════════════════════════════════════════════ */
 
-function draw_header(
-  doc: jsPDF,
-  product_name: string,
-  page_num: number,
-  total_pages: number
+/** Draw a dark-blue section title banner */
+function sectionTitle(ctx: PageContext, text: string, nh = 16) {
+  ctx.ensureSpace(nh + 6);
+  const d = ctx.doc;
+  d.setFillColor(...DARK_BLUE);
+  d.rect(M, ctx.y, CONTENT_W, nh, "F");
+  d.setTextColor(255, 255, 255);
+  d.setFont("helvetica", "bold");
+  d.setFontSize(9);
+  d.text(text, M + 5, ctx.y + nh - 5);
+  ctx.y += nh + 5;
+}
+
+/** Draw body text */
+function bodyText(ctx: PageContext, text: string, fs = 7.5) {
+  const d = ctx.doc;
+  d.setTextColor(0, 0, 0);
+  d.setFont("helvetica", "normal");
+  d.setFontSize(fs);
+  const lines = d.splitTextToSize(text, CONTENT_W - 4);
+  for (const l of lines) {
+    ctx.ensureSpace(fs + 4);
+    d.text(l, M + 2, ctx.y + fs);
+    ctx.y += fs + 3;
+  }
+}
+
+/** Draw a key-value info table */
+function infoTable(ctx: PageContext, items: [string, string][], labelW = 120) {
+  const d = ctx.doc;
+  const cols = [labelW, CONTENT_W - labelW];
+  const rowH = 14;
+  ctx.ensureSpace(rowH * items.length + 4);
+
+  for (let i = 0; i < items.length; i++) {
+    const [k, v] = items[i];
+    const ry = ctx.y;
+    // Label cell
+    d.setFillColor(...LIGHT_BLUE);
+    d.rect(M, ry, cols[0], rowH, "F");
+    d.setDrawColor(...BORDER_COLOR);
+    d.setLineWidth(0.3);
+    d.rect(M, ry, cols[0], rowH, "S");
+    d.setTextColor(0, 0, 0);
+    d.setFont("helvetica", "bold");
+    d.setFontSize(7);
+    d.text(k, M + 4, ry + 9);
+    // Value cell
+    d.setFillColor(255, 255, 255);
+    d.rect(M + cols[0], ry, cols[1], rowH, "F");
+    d.rect(M + cols[0], ry, cols[1], rowH, "S");
+    d.setFont("helvetica", "normal");
+    d.text(v || "—", M + cols[0] + 4, ry + 9);
+    ctx.y += rowH;
+  }
+  ctx.y += 4;
+}
+
+/** Draw a multi-column data table */
+function dataTable(
+  ctx: PageContext,
+  headers: string[],
+  rows: string[][],
+  colW: number[],
+  opts?: { highlightTotal?: boolean }
 ) {
-  // Header background
-  doc.setFillColor(...COLOR_DARK_BLUE);
-  doc.rect(0, 0, PAGE_W, 38, "F");
+  const d = ctx.doc;
+  const rowH = 14;
+  const tblW = colW.reduce((a, b) => a + b, 0);
 
-  // Header text
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(9);
-  doc.setFont(FONT_BOLD, "bold");
-  doc.text("SAFETY DATA SHEET", MARGIN, 14);
-  doc.setFont(FONT_NORMAL, "normal");
-  doc.setFontSize(8);
-  doc.text(product_name, MARGIN, 24);
-  doc.text("GHS/UN 16th Edition (2026)", MARGIN, 32);
+  ctx.ensureSpace(rowH * (rows.length + 1) + 8);
 
-  // Top-right page indicator
-  doc.setFontSize(7);
-  doc.text(`Page ${page_num} of ${total_pages}`, PAGE_W - MARGIN, 14, { align: "right" });
+  // Header row
+  d.setFillColor(...LIGHT_BLUE);
+  let x = M;
+  for (let c = 0; c < headers.length; c++) {
+    d.rect(x, ctx.y, colW[c], rowH, "F");
+    d.setDrawColor(...BORDER_COLOR);
+    d.setLineWidth(0.3);
+    d.rect(x, ctx.y, colW[c], rowH, "S");
+    d.setTextColor(0, 0, 0);
+    d.setFont("helvetica", "bold");
+    d.setFontSize(7);
+    d.text(headers[c], x + 3, ctx.y + 9);
+    x += colW[c];
+  }
+  ctx.y += rowH;
+
+  // Data rows
+  for (let r = 0; r < rows.length; r++) {
+    x = M;
+    const isTotal = opts?.highlightTotal && r === rows.length - 1;
+    for (let c = 0; c < rows[r].length; c++) {
+      d.setFillColor(isTotal ? LIGHT_BLUE[0] : 255, isTotal ? LIGHT_BLUE[1] : 255, isTotal ? LIGHT_BLUE[2] : 255);
+      d.rect(x, ctx.y, colW[c], rowH, "F");
+      d.setDrawColor(...BORDER_COLOR);
+      d.setLineWidth(0.3);
+      d.rect(x, ctx.y, colW[c], rowH, "S");
+      d.setTextColor(isTotal ? DARK_BLUE[0] : 0, isTotal ? DARK_BLUE[1] : 0, isTotal ? DARK_BLUE[2] : 0);
+      d.setFont("helvetica", isTotal ? "bold" : "normal");
+      d.setFontSize(7);
+      d.text(rows[r][c], x + 3, ctx.y + 9);
+      x += colW[c];
+    }
+    ctx.y += rowH;
+  }
+  ctx.y += 6;
 }
 
-function draw_footer(doc: jsPDF, version: string, date: string, supplier: string, page_num: number) {
-  // Footer line
-  doc.setDrawColor(180, 180, 180);
-  doc.line(MARGIN, PAGE_H - 28, PAGE_W - MARGIN, PAGE_H - 28);
+/* ════════════════════════════════════════════════════
+   SECTION 1 — First Page (Identification)
+   ════════════════════════════════════════════════════ */
 
-  doc.setTextColor(...COLOR_GRAY);
-  doc.setFontSize(6.5);
-  doc.setFont(FONT_NORMAL, "normal");
-  doc.text(`Version ${version}`, MARGIN, PAGE_H - 18);
-  doc.text(`Date: ${date}`, MARGIN + 60, PAGE_H - 18);
-  doc.text(`Supplier: ${supplier}`, PAGE_W - MARGIN, PAGE_H - 18, { align: "right" });
-}
-
-/* ════════════════════════════════════════════════════════
-   HELPER – section title banner
-   ════════════════════════════════════════════════════════ */
-
-function draw_section_title(doc: jsPDF, y: number, text: string): number {
-  const h = 16;
-  doc.setFillColor(...COLOR_DARK_BLUE);
-  doc.rect(MARGIN, y, CONTENT_W, h, "F");
-  doc.setTextColor(255, 255, 255);
-  doc.setFont(FONT_BOLD, "bold");
-  doc.setFontSize(FONT_SIZE_SECTION);
-  doc.text(text, MARGIN + 6, y + 11);
-  return y + h + 4;
-}
-
-/* ════════════════════════════════════════════════════════
-   HELPER – key-value layout (two-column)
-   ════════════════════════════════════════════════════════ */
-
-function draw_kv_row(
-  doc: jsPDF,
-  y: number,
-  label: string,
-  value: string,
-  label_w = 140
-): number {
-  doc.setFont(FONT_BOLD, "bold");
-  doc.setFontSize(FONT_SIZE_BODY);
-  doc.setTextColor(0, 0, 0);
-  doc.text(label + ":", MARGIN, y);
-  doc.setFont(FONT_NORMAL, "normal");
-  doc.text(value, MARGIN + label_w, y);
-  return y + 11;
-}
-
-/* ════════════════════════════════════════════════════════
-   SECTION CONTENT HELPERS
-   ════════════════════════════════════════════════════════ */
-
-function section1_content(
-  doc: jsPDF,
-  start_y: number,
-  product: ParsedProduct,
-  settings: SdsSettings
-): number {
+function renderPage1(ctx: PageContext, product: ParsedProduct, settings: SdsSettings) {
+  const d = ctx.doc;
   const ki = settings.kit_info;
-  let y = start_y;
+  let y = ctx.y + 20;
 
-  // Title
-  doc.setFont(FONT_BOLD, "bold");
-  doc.setFontSize(FONT_SIZE_TITLE);
-  doc.setTextColor(...COLOR_DARK_BLUE);
-  doc.text("SAFETY DATA SHEET", MARGIN, y);
-  y += 20;
+  // Big title
+  d.setFont("helvetica", "bold");
+  d.setFontSize(20);
+  d.setTextColor(...DARK_BLUE);
+  d.text("SAFETY DATA SHEET", W / 2, y, { align: "center" });
+  y += 22;
+  d.setDrawColor(...DARK_BLUE);
+  d.setLineWidth(0.5);
+  d.line(M + 20, y, W - M - 20, y);
+  y += 14;
 
-  // Horizontal rule
-  doc.setDrawColor(...COLOR_DARK_BLUE);
-  doc.setLineWidth(0.5);
-  doc.line(MARGIN, y, PAGE_W - MARGIN, y);
-  y += 8;
+  // Report info bar
+  d.setFillColor(...LIGHT_BLUE);
+  d.rect(M, y, CONTENT_W, 24, "F");
+  d.setFont("helvetica", "normal");
+  d.setFontSize(8);
+  d.setTextColor(0, 0, 0);
+  const rpt = `${ki.report_number_prefix}-${product.section.replace(".", "")}`;
+  d.text(`Report No.:  ${rpt}    |    Date:  ${ki.issue_date}    |    Version: ${ki.version}`, M + 8, y + 16);
+  y += 34;
 
-  // Section title
-  y = draw_section_title(doc, y, "SECTION 1 — Identification");
+  // ── SECTION 1 ──
+  ctx.y = y;
+  sectionTitle(ctx, "SECTION 1 — Identification of the Substance / Mixture and the Company / Undertaking");
 
-  // Content
+  const addr = ki.address.trim();
+  const tel = ki.telephone.trim();
+  const eml = ki.email.trim();
+  const etel = ki.emergency_telephone.trim();
+
+  // Show "—" only if truly empty
+  const av = (v: string) => v || "—";
   const items: [string, string][] = [
     ["Product Name", product.product_name],
-    ["Kit Name", ki.kit_name],
     ["ASIN", ki.asin],
+    ["Kit Name", ki.kit_name],
+    ["Recommended Use", "Golf club cleaning solution"],
     ["Supplier Name", ki.supplier_name],
-    ["Address", ki.address || "—"],
-    ["Telephone", ki.telephone || "—"],
-    ["Email", ki.email || "—"],
-    ["Emergency Telephone", ki.emergency_telephone || "—"],
-    ["Report No.", `${ki.report_number_prefix}-${product.section.replace(".", "")}`],
-    ["Date", ki.issue_date],
-    ["Version", ki.version],
+    ["Address", addr || "(not specified)"],
+    ["Telephone", tel || "(not specified)"],
+    ["Email", eml || "(not specified)"],
+    ["Emergency Telephone", etel || "(not specified)"],
   ];
+  infoTable(ctx, items);
 
-  for (const [label, value] of items) {
-    y = draw_kv_row(doc, y, label, value);
-  }
-
-  y += 4;
-
-  // Stamp / signature (if uploaded)
+  // Stamp image (right side of page 1, top area)
   if (ki.company_stamp_data_url) {
     try {
-      // Split data URL to get base64
       const parts = ki.company_stamp_data_url.split(",");
       if (parts.length === 2) {
-        const img_data = parts[1];
-        doc.addImage(img_data, "PNG", MARGIN + 200, y - 10, 60, 30);
-        y += 40;
+        // Place top-right corner of the page, above section 1
+        const imgW = 80;
+        const imgH = 40;
+        const imgX = W - M - imgW;
+        const imgY = 100;
+        // Add white background behind stamp
+        d.setFillColor(255, 255, 255);
+        d.rect(imgX - 2, imgY - 2, imgW + 4, imgH + 4, "F");
+        d.setDrawColor(...BORDER_COLOR);
+        d.setLineWidth(0.3);
+        d.rect(imgX - 2, imgY - 2, imgW + 4, imgH + 4, "S");
+        d.addImage(parts[1], "PNG", imgX, imgY, imgW, imgH);
       }
-    } catch {
-      // Silently skip if image can't be added
-    }
+    } catch { /* skip if image fails */ }
   }
 
-  return y + 10;
+  // ── SECTION 2 ──
+  sectionTitle(ctx, "SECTION 2 — Hazard Identification");
+
+  // Green "NOT CLASSIFIED" banner
+  d.setFillColor(...GREEN_BG);
+  d.setDrawColor(...GREEN_TEXT);
+  d.setLineWidth(1);
+  d.rect(M, ctx.y, CONTENT_W, 18, "FD");
+  d.setTextColor(...GREEN_TEXT);
+  d.setFont("helvetica", "bold");
+  d.setFontSize(9);
+  d.text("NOT CLASSIFIED AS HAZARDOUS    —    GHS/UN Compliant", M + 10, ctx.y + 12);
+  ctx.y += 22;
+
+  // GHS table
+  dataTable(ctx,
+    ["Category", "Description"],
+    [
+      ["GHS Classification", "Not classified as hazardous"],
+      ["Hazard Symbols", "None"],
+      ["Signal Word", "None"],
+      ["Hazard Statements", "None"],
+      ["Precautionary Statements", "None (general handling only)"],
+    ],
+    [120, CONTENT_W - 120]
+  );
 }
 
-function section2_content(doc: jsPDF, start_y: number): number {
-  let y = start_y;
-  y = draw_section_title(doc, y, "SECTION 2 — Hazard Identification");
+/* ════════════════════════════════════════════════════
+   SECTION 3 — Composition / Ingredients
+   ════════════════════════════════════════════════════ */
 
-  // Green classification box
-  doc.setFillColor(...COLOR_GREEN_BG);
-  doc.setDrawColor(...COLOR_GREEN);
-  doc.rect(MARGIN, y, CONTENT_W, 18, "FD");
-  doc.setTextColor(...COLOR_GREEN);
-  doc.setFont(FONT_BOLD, "bold");
-  doc.setFontSize(9);
-  doc.text("NOT CLASSIFIED AS HAZARDOUS", MARGIN + 8, y + 12);
-  y += 24;
+function renderSection3(ctx: PageContext, product: ParsedProduct) {
+  sectionTitle(ctx, "SECTION 3 — Composition / Information on Ingredients");
 
-  doc.setTextColor(0, 0, 0);
-  doc.setFont(FONT_NORMAL, "normal");
-  doc.setFontSize(FONT_SIZE_BODY);
-  const lines = doc.splitTextToSize(
-    "This mixture is not classified as hazardous according to GHS (Globally Harmonized System) criteria. No hazard symbols, signal words, or hazard statements are required under normal conditions of use.",
-    CONTENT_W
-  );
-  for (const line of lines) {
-    doc.text(line, MARGIN, y);
-    y += 10;
-  }
-  y += 6;
+  dbtxt(ctx, `Product Name: ${product.product_name}`, 0, CONTENT_W, 7);
+  ctx.y += 1;
 
-  // Hazard info table
-  const table_data = [
-    ["GHS Classification", "Not classified as hazardous"],
-    ["Hazard Symbols", "None"],
-    ["Signal Word", "None"],
-    ["Hazard Statements", "None"],
-    ["Precautionary Statements", "None (general handling only)"],
-  ];
-
-  autoTable(doc, {
-    startY: y,
-    head: [["Category", "Description"]],
-    body: table_data,
-    theme: "grid",
-    headStyles: {
-      fillColor: [...COLOR_LIGHT_BLUE],
-      textColor: 0,
-      fontStyle: "bold",
-      fontSize: 7,
-      cellPadding: 2,
-    },
-    bodyStyles: { fontSize: 7, cellPadding: 2 },
-    columnStyles: { 0: { cellWidth: 120 }, 1: { cellWidth: CONTENT_W - 120 } },
-    margin: { left: MARGIN, right: MARGIN },
-    tableWidth: CONTENT_W,
-  });
-  return (doc as any).lastAutoTable.finalY + 8;
-}
-
-function section3_content(
-  doc: jsPDF,
-  start_y: number,
-  product: ParsedProduct
-): number {
-  let y = start_y;
-  y = draw_section_title(doc, y, "SECTION 3 — Composition / Information on Ingredients");
-
-  doc.setFont(FONT_NORMAL, "normal");
-  doc.setFontSize(FONT_SIZE_BODY);
-  const lines = doc.splitTextToSize(
-    `Product Name: ${product.product_name}`,
-    CONTENT_W
-  );
-  for (const line of lines) {
-    doc.text(line, MARGIN, y);
-    y += 10;
-  }
-  y += 2;
-
-  // Ingredients table
-  const body = product.ingredients.map((ing, i) => [
+  const rows = product.ingredients.map((ing, i) => [
     String(i + 1),
     ing.chemical_composition,
     ing.cas_number || "N/A",
-    ing.percentage !== null ? `${ing.percentage}%` : ing.percentage_raw || "—",
+    ing.percentage !== null ? `${ing.percentage}%` : (ing.percentage_raw || "—"),
   ]);
 
-  autoTable(doc, {
-    startY: y,
-    head: [["#", "Chemical Composition", "CAS No.", "Percentage"]],
-    body,
-    theme: "grid",
-    headStyles: {
-      fillColor: [...COLOR_LIGHT_BLUE],
-      textColor: 0,
-      fontStyle: "bold",
-      fontSize: 7,
-      cellPadding: 2,
-    },
-    bodyStyles: { fontSize: 7, cellPadding: 2 },
-    columnStyles: {
-      0: { cellWidth: 20 },
-      1: { cellWidth: 220 },
-      2: { cellWidth: 100 },
-      3: { cellWidth: 60, halign: "right" },
-    },
-    margin: { left: MARGIN, right: MARGIN },
-    tableWidth: CONTENT_W,
-  });
+  dataTable(ctx,
+    ["#", "Chemical Composition", "CAS No.", "Percentage"],
+    rows,
+    [24, 234, 110, 70]
+  );
 
   // Total row
-  const fy = (doc as any).lastAutoTable.finalY;
-  doc.setFont(FONT_BOLD, "bold");
-  doc.setFontSize(FONT_SIZE_BODY);
-  doc.setTextColor(...COLOR_DARK_BLUE);
-  doc.text("Total:", PAGE_W - MARGIN - 60, fy + 6, { align: "right" });
-  doc.text(`${product.percentage_total}%`, PAGE_W - MARGIN, fy + 6, { align: "right" });
-
-  return fy + 14;
+  const d = ctx.doc;
+  d.setFont("helvetica", "bold");
+  d.setFontSize(7);
+  d.setTextColor(...DARK_BLUE);
+  d.text(`Total: ${product.percentage_total}%`, W - M, ctx.y, { align: "right" });
+  ctx.y += 12;
 }
 
-/** Standard body text for a section */
-function section_standard_text(doc: jsPDF, y: number, lines: string[]): number {
-  doc.setFont(FONT_NORMAL, "normal");
-  doc.setFontSize(FONT_SIZE_BODY);
-  doc.setTextColor(0, 0, 0);
-  for (const line of lines) {
-    const wrapped = doc.splitTextToSize(line, CONTENT_W);
-    for (const w of wrapped) {
-      doc.text(w, MARGIN, y);
-      y += 9;
-    }
+/* ════════════════════════════════════════════════════
+   SECTIONS 4-6 — Standard info tables
+   ════════════════════════════════════════════════════ */
+
+function sectionKVTable(ctx: PageContext, title: string, rows: [string, string][]) {
+  sectionTitle(ctx, title);
+  infoTable(ctx, rows, 105);
+}
+
+function dbtxt(ctx: PageContext, text: string, x0: number, w: number, fs = 7) {
+  const d = ctx.doc;
+  d.setTextColor(0, 0, 0);
+  d.setFont("helvetica", "normal");
+  d.setFontSize(fs);
+  const lines = d.splitTextToSize(text, w);
+  for (const l of lines) {
+    ctx.ensureSpace(fs + 4);
+    d.text(l, M + x0 + 2, ctx.y + fs);
+    ctx.y += fs + 2.5;
   }
-  return y + 4;
 }
 
-function section4_content(doc: jsPDF, start_y: number): number {
-  let y = start_y;
-  y = draw_section_title(doc, y, "SECTION 4 — First-Aid Measures");
-
-  const table = [
-    ["Eye Contact", "Rinse immediately with plenty of water for at least 15 minutes. Remove contact lenses if present. Seek medical attention if irritation persists."],
-    ["Skin Contact", "Wash with soap and water. Remove contaminated clothing. Seek medical attention if irritation develops."],
-    ["Inhalation", "Move to fresh air. If symptoms occur, seek medical attention."],
-    ["Ingestion", "Rinse mouth with water. Do NOT induce vomiting. Seek medical attention if symptoms develop."],
-  ];
-
-  autoTable(doc, {
-    startY: y,
-    head: [["Route of Exposure", "First-Aid Measures"]],
-    body: table,
-    theme: "grid",
-    headStyles: { fillColor: [...COLOR_LIGHT_BLUE], textColor: 0, fontStyle: "bold", fontSize: 7, cellPadding: 2 },
-    bodyStyles: { fontSize: 7, cellPadding: 2 },
-    columnStyles: { 0: { cellWidth: 100 }, 1: { cellWidth: CONTENT_W - 100 } },
-    margin: { left: MARGIN, right: MARGIN },
-    tableWidth: CONTENT_W,
-  });
-  return (doc as any).lastAutoTable.finalY + 8;
+function renderSectionN(ctx: PageContext, title: string, lines: string[]) {
+  sectionTitle(ctx, title);
+  ctx.y += 1;
+  for (const line of lines) {
+    dbtxt(ctx, line, 0, CONTENT_W, 7);
+    ctx.y += 1;
+  }
 }
 
-function section5_content(doc: jsPDF, start_y: number): number {
-  let y = start_y;
-  y = draw_section_title(doc, y, "SECTION 5 — Fire-Fighting Measures");
-  y = section_standard_text(doc, y, [
-    "Suitable Extinguishing Media: Water spray, dry chemical, foam, CO₂.",
-    "Unsuitable Extinguishing Media: None known.",
-    "Specific Hazards: Non-flammable. No hazardous combustion products under normal fire conditions.",
-    "Protective Equipment: Self-contained breathing apparatus and full protective clothing for firefighters.",
-    "Firefighting Instructions: Use standard firefighting procedures. Collect contaminated fire water separately. Do not allow runoff to enter drains or waterways.",
-  ]);
-  return y;
-}
+/* ════════════════════════════════════════════════════
+   GENERATE SINGLE PRODUCT SDS (7 pages)
+   ════════════════════════════════════════════════════ */
 
-function section6_content(doc: jsPDF, start_y: number): number {
-  let y = start_y;
-  y = draw_section_title(doc, y, "SECTION 6 — Accidental Release Measures");
-  y = section_standard_text(doc, y, [
-    "Personal Precautions: Avoid direct contact. Wear appropriate personal protective equipment.",
-    "Environmental Precautions: Prevent product from entering drains, sewers, and waterways. Use absorbent materials to contain spills.",
-    "Containment Methods: Contain spilled material with inert absorbent (sand, earth, vermiculite). Collect in suitable containers for disposal.",
-    "Cleanup Procedures: Wash area with water after absorption. Dispose of collected material in accordance with local regulations.",
-  ]);
-  return y;
-}
-
-function section7_content(doc: jsPDF, start_y: number): number {
-  let y = start_y;
-  y = draw_section_title(doc, y, "SECTION 7 — Handling and Storage");
-  y = section_standard_text(doc, y, [
-    "Handling: Handle in accordance with good industrial hygiene and safety practice. Avoid contact with eyes and skin. Use in well-ventilated areas. Keep container tightly closed when not in use.",
-    "Storage: Store in original container in a cool, dry, well-ventilated area. Keep away from incompatible materials. Store at temperatures between 5°C and 40°C. Protect from freezing.",
-    "Incompatible Materials: Strong oxidizing agents, strong acids, strong bases.",
-  ]);
-  return y;
-}
-
-function section8_content(doc: jsPDF, start_y: number): number {
-  let y = start_y;
-  y = draw_section_title(doc, y, "SECTION 8 — Exposure Controls / Personal Protection");
-
-  const table = [
-    ["Component", "ACGIH TLV (ppm)", "OSHA PEL (ppm)", "Biological Exposure Index"],
-    ["Not established for this mixture", "N/E", "N/E", "N/E"],
-  ];
-
-  autoTable(doc, {
-    startY: y,
-    head: [["Component", "ACGIH TLV (ppm)", "OSHA PEL (ppm)", "Biological Exposure Index"]],
-    body: table.slice(1),
-    theme: "grid",
-    headStyles: { fillColor: [...COLOR_LIGHT_BLUE], textColor: 0, fontStyle: "bold", fontSize: 7, cellPadding: 2 },
-    bodyStyles: { fontSize: 7, cellPadding: 2 },
-    margin: { left: MARGIN, right: MARGIN },
-    tableWidth: CONTENT_W,
-  });
-  y = (doc as any).lastAutoTable.finalY + 8;
-
-  y = section_standard_text(doc, y, [
-    "Engineering Controls: General ventilation is sufficient under normal use conditions.",
-    "Eye Protection: Safety glasses with side shields recommended.",
-    "Skin Protection: Impervious gloves (nitrile rubber recommended). Standard work clothing.",
-    "Respiratory Protection: Not required under normal use conditions.",
-    "Hygiene Measures: Wash hands after handling. Do not eat, drink or smoke when using.",
-  ]);
-  return y;
-}
-
-function section9_content(doc: jsPDF, start_y: number, settings: SdsSettings): number {
-  let y = start_y;
-  y = draw_section_title(doc, y, "SECTION 9 — Physical and Chemical Properties");
-
+function generate_product_sds_pdf(product: ParsedProduct, settings: SdsSettings): jsPDF {
+  const ki = settings.kit_info;
   const pp = settings.physical_properties;
-  const props: [string, string][] = [
+  const ti = settings.transport_info;
+  const ri = settings.regulatory_info;
+
+  const doc = new jsPDF({ format: "letter", unit: "pt" });
+  const ctx = new PageContext(
+    doc, product.product_name,
+    ki.version, ki.issue_date, ki.supplier_name,
+    7
+  );
+
+  // ── PAGE 1: Sections 1 + 2 ──
+  renderPage1(ctx, product, settings);
+
+  // ── PAGE 2: Sections 3 + 4 ──
+  ctx.addPage();
+  renderSection3(ctx, product);
+  sectionKVTable(ctx, "SECTION 4 — First-Aid Measures", [
+    ["Eye Contact", "Rinse with water for 15 minutes. Remove contacts. Seek medical attention if irritation persists."],
+    ["Skin Contact", "Wash with soap and water. Remove contaminated clothing."],
+    ["Inhalation", "Move to fresh air. If symptoms occur, seek medical attention."],
+    ["Ingestion", "Rinse mouth with water. Do not induce vomiting. Seek medical attention."],
+  ]);
+
+  // ── PAGE 3: Sections 5 + 6 + 7 ──
+  ctx.addPage();
+  sectionKVTable(ctx, "SECTION 5 — Fire-Fighting Measures", [
+    ["Suitable Extinguishing Media", "Water spray, dry chemical, foam, CO₂."],
+    ["Unsuitable Media", "None known."],
+    ["Specific Hazards", "Non-flammable. No hazardous combustion products."],
+    ["Firefighting Equipment", "Self-contained breathing apparatus, full protective clothing."],
+  ]);
+  sectionKVTable(ctx, "SECTION 6 — Accidental Release Measures", [
+    ["Personal Precautions", "Avoid direct contact. Wear appropriate PPE."],
+    ["Environmental Precautions", "Prevent entry into drains and waterways. Use absorbent for containment."],
+    ["Cleanup Procedures", "Absorb with inert material. Collect in containers. Wash area with water."],
+  ]);
+  sectionKVTable(ctx, "SECTION 7 — Handling and Storage", [
+    ["Handling", "Use with good industrial hygiene. Avoid skin/eye contact. Keep container closed."],
+    ["Storage", "Store in a cool, dry, well-ventilated area between 5°C and 40°C. Protect from freezing."],
+    ["Incompatible Materials", "Strong oxidizing agents, strong acids, strong bases."],
+  ]);
+
+  // ── PAGE 4: Sections 8 ──
+  ctx.addPage();
+  sectionKVTable(ctx, "SECTION 8 — Exposure Controls / Personal Protection", [
+    ["Engineering Controls", "General ventilation is sufficient."],
+    ["Eye Protection", "Safety glasses with side shields."],
+    ["Skin Protection", "Impervious gloves (nitrile recommended). Standard work clothing."],
+    ["Respiratory Protection", "Not required under normal use conditions."],
+    ["Hygiene Measures", "Wash hands after handling. No eating/drinking/smoking during use."],
+    ["Occupational Exposure Limits", "Not established for this mixture."],
+  ]);
+
+  // ── PAGE 5: Section 9 (Physical Properties table) ──
+  ctx.addPage();
+  sectionKVTable(ctx, "SECTION 9 — Physical and Chemical Properties", [
     ["Appearance", pp.appearance],
     ["Odor", pp.odor],
     ["Odor Threshold", pp.odor_threshold],
@@ -493,87 +483,42 @@ function section9_content(doc: jsPDF, start_y: number, settings: SdsSettings): n
     ["Autoignition Temperature", pp.autoignition_temperature],
     ["Decomposition Temperature", pp.decomposition_temperature],
     ["Viscosity", pp.viscosity],
-  ];
+  ]);
 
-  const body = props.map(([label, value]) => [label, value]);
-
-  autoTable(doc, {
-    startY: y,
-    head: [["Property", "Value"]],
-    body,
-    theme: "grid",
-    headStyles: { fillColor: [...COLOR_LIGHT_BLUE], textColor: 0, fontStyle: "bold", fontSize: 7, cellPadding: 2 },
-    bodyStyles: { fontSize: 7, cellPadding: 2 },
-    columnStyles: { 0: { cellWidth: 200 }, 1: { cellWidth: CONTENT_W - 200 } },
-    margin: { left: MARGIN, right: MARGIN },
-    tableWidth: CONTENT_W,
-  });
-  return (doc as any).lastAutoTable.finalY + 8;
-}
-
-function section10_content(doc: jsPDF, start_y: number): number {
-  let y = start_y;
-  y = draw_section_title(doc, y, "SECTION 10 — Stability and Reactivity");
-  y = section_standard_text(doc, y, [
-    "Reactivity: No dangerous reactions known under normal conditions of use.",
-    "Chemical Stability: Stable under normal ambient and anticipated storage and handling conditions.",
+  // ── PAGE 6: Sections 10 + 11 + 12 + 13 ──
+  ctx.addPage();
+  renderSectionN(ctx, "SECTION 10 — Stability and Reactivity", [
+    "Reactivity: No dangerous reactions known under normal conditions.",
+    "Chemical Stability: Stable under normal ambient and storage conditions.",
     "Hazardous Reactions: None under normal processing.",
     "Conditions to Avoid: Extreme temperatures, freezing, direct sunlight.",
-    "Incompatible Materials: Strong oxidizing agents, strong acids, strong bases.",
-    "Hazardous Decomposition Products: None known under normal use. Thermal decomposition may produce carbon oxides.",
+    "Incompatible Materials: Strong oxidizers, strong acids, strong bases.",
+    "Hazardous Decomposition Products: None known. Thermal decomposition may produce carbon oxides.",
   ]);
-  return y;
-}
-
-function section11_content(doc: jsPDF, start_y: number): number {
-  let y = start_y;
-  y = draw_section_title(doc, y, "SECTION 11 — Toxicological Information");
-  y = section_standard_text(doc, y, [
-    "Acute Toxicity: Based on available data, classification criteria are not met. No acute toxicity hazards under GHS.",
-    "Skin Corrosion/Irritation: May cause mild irritation upon prolonged contact. Not classified as a skin irritant.",
-    "Serious Eye Damage/Irritation: May cause mild transient irritation. Not classified as an eye irritant.",
-    "Respiratory/Skin Sensitization: Not classified as a respiratory or skin sensitizer.",
-    "Germ Cell Mutagenicity: Not classified as a germ cell mutagen.",
-    "Carcinogenicity: No component is classified as carcinogenic by IARC, NTP, or OSHA.",
-    "Reproductive Toxicity: Not classified as a reproductive toxicant.",
-    "STOT - Single Exposure: Not classified.",
-    "STOT - Repeated Exposure: Not classified.",
-    "Aspiration Hazard: Not classified.",
-    "Note: This mixture has been evaluated using GHS criteria. No significant toxicological hazards are identified for the intended use of this product.",
+  renderSectionN(ctx, "SECTION 11 — Toxicological Information", [
+    "Acute Toxicity: Not classified. No acute toxicity hazards under GHS.",
+    "Skin Corrosion/Irritation: May cause mild irritation on prolonged contact.",
+    "Eye Damage/Irritation: May cause mild transient irritation.",
+    "Sensitization: Not a respiratory or skin sensitizer.",
+    "Carcinogenicity: No component classified as carcinogenic (IARC, NTP, OSHA).",
+    "STOT/Reproductive/Aspiration: Not classified.",
+    "Note: Evaluated using GHS criteria. No significant toxicological hazards.",
   ]);
-  return y;
-}
-
-function section12_content(doc: jsPDF, start_y: number): number {
-  let y = start_y;
-  y = draw_section_title(doc, y, "SECTION 12 — Ecological Information");
-  y = section_standard_text(doc, y, [
-    "Ecotoxicity: The components of this mixture are biodegradable surfactants. No significant environmental hazards are anticipated under normal use conditions.",
-    "Persistence and Degradability: Readily biodegradable. Surfactants meet OECD biodegradability criteria.",
-    "Bioaccumulative Potential: Not expected to bioaccumulate significantly.",
-    "Mobility in Soil: Water-miscible. May be mobile in soil and aquatic environments.",
-    "Other Adverse Effects: No known significant effects or critical hazards.",
+  renderSectionN(ctx, "SECTION 12 — Ecological Information", [
+    "Ecotoxicity: No significant environmental hazards under normal use.",
+    "Persistence & Degradability: Readily biodegradable surfactants (OECD criteria).",
+    "Bioaccumulation: Not expected to bioaccumulate significantly.",
+    "Mobility in Soil: Water-miscible. May be mobile in soil/aquatic environments.",
   ]);
-  return y;
-}
-
-function section13_content(doc: jsPDF, start_y: number): number {
-  let y = start_y;
-  y = draw_section_title(doc, y, "SECTION 13 — Disposal Considerations");
-  y = section_standard_text(doc, y, [
-    "Waste Disposal: Dispose of in accordance with local, regional, and national regulations. Do not dispose of product into drains or waterways.",
-    "Contaminated Packaging: Empty containers should be rinsed with water and disposed of in accordance with applicable regulations. Recycle or dispose of through licensed waste management facilities.",
-    "RCRA Hazard Class (USA): Not classified as hazardous waste under RCRA.",
+  renderSectionN(ctx, "SECTION 13 — Disposal Considerations", [
+    "Waste Disposal: Dispose per local/regional/national regulations. Do not discharge to drains.",
+    "Contaminated Packaging: Rinse and dispose through licensed waste facilities.",
+    "RCRA (USA): Not classified as hazardous waste.",
   ]);
-  return y;
-}
 
-function section14_content(doc: jsPDF, start_y: number, settings: SdsSettings): number {
-  let y = start_y;
-  y = draw_section_title(doc, y, "SECTION 14 — Transport Information");
-
-  const ti = settings.transport_info;
-  const items: [string, string][] = [
+  // ── PAGE 7: Sections 14 + 15 + 16 ──
+  ctx.addPage();
+  sectionKVTable(ctx, "SECTION 14 — Transport Information", [
     ["UN Number", ti.un_number],
     ["UN Proper Shipping Name", ti.proper_shipping_name],
     ["Transport Hazard Class", ti.hazard_class],
@@ -583,328 +528,157 @@ function section14_content(doc: jsPDF, start_y: number, settings: SdsSettings): 
     ["DOT (USA)", "Not regulated as dangerous goods"],
     ["IMDG (Marine)", "Not regulated"],
     ["IATA (Air)", "Not regulated"],
-  ];
-
-  const body = items.map(([label, value]) => [label, value]);
-
-  autoTable(doc, {
-    startY: y,
-    head: [["Transport Category", "Information"]],
-    body,
-    theme: "grid",
-    headStyles: { fillColor: [...COLOR_LIGHT_BLUE], textColor: 0, fontStyle: "bold", fontSize: 7, cellPadding: 2 },
-    bodyStyles: { fontSize: 7, cellPadding: 2 },
-    columnStyles: { 0: { cellWidth: 140 }, 1: { cellWidth: CONTENT_W - 140 } },
-    margin: { left: MARGIN, right: MARGIN },
-    tableWidth: CONTENT_W,
-  });
-  return (doc as any).lastAutoTable.finalY + 8;
-}
-
-function section15_content(doc: jsPDF, start_y: number, settings: SdsSettings): number {
-  let y = start_y;
-  y = draw_section_title(doc, y, "SECTION 15 — Regulatory Information");
-
-  const ri = settings.regulatory_info;
-  const items: [string, string][] = [
+  ]);
+  sectionKVTable(ctx, "SECTION 15 — Regulatory Information", [
     ["GHS Classification", ri.ghs_classification],
     ["US EPA", ri.us_epa],
     ["California Proposition 65", ri.california_prop65],
     ["TSCA (USA)", ri.tsca],
     ["EU CLP / GHS", ri.eu_clp],
     ["Amazon Product Safety", ri.amazon_product_safety],
-  ];
+  ]);
 
-  const body = items.map(([label, value]) => [label, value]);
-
-  autoTable(doc, {
-    startY: y,
-    head: [["Regulation", "Status"]],
-    body,
-    theme: "grid",
-    headStyles: { fillColor: [...COLOR_LIGHT_BLUE], textColor: 0, fontStyle: "bold", fontSize: 7, cellPadding: 2 },
-    bodyStyles: { fontSize: 7, cellPadding: 2 },
-    columnStyles: { 0: { cellWidth: 140 }, 1: { cellWidth: CONTENT_W - 140 } },
-    margin: { left: MARGIN, right: MARGIN },
-    tableWidth: CONTENT_W,
-  });
-  return (doc as any).lastAutoTable.finalY + 8;
-}
-
-function section16_content(doc: jsPDF, start_y: number, settings: SdsSettings): number {
-  let y = start_y;
-  y = draw_section_title(doc, y, "SECTION 16 — Other Information");
-
-  const sup = settings.kit_info.supplier_name;
-  y = section_standard_text(doc, y, [
+  const sup = ki.supplier_name;
+  renderSectionN(ctx, "SECTION 16 — Other Information", [
     `Prepared by: Quality & Safety Department, ${sup}`,
     "",
-    "Revision History:",
-    "  Version 1.0 — Initial issue",
+    "Revision: Version 1.0 — Initial issue",
+    "References: GHS Rev.9 / UN GHS 16th Edition (2026); OSHA 29 CFR 1910.1200;",
+    "EU CLP (EC) No. 1272/2008; Amazon SDS Compliance Guidelines.",
     "",
-    "References:",
-    "  • GHS Rev. 9 (2025) / UN GHS 16th Revised Edition (2026)",
-    "  • OSHA Hazard Communication Standard 29 CFR 1910.1200",
-    "  • EU Regulation (EC) No. 1272/2008 (CLP)",
-    "  • Amazon SDS Compliance Guidelines",
-    "",
-    "Disclaimer:",
-    "The information provided in this Safety Data Sheet is based on current knowledge and is intended to",
-    "describe the product for safety purposes only. It does not constitute a warranty of any kind.",
-    `This SDS was prepared for ${sup} by the Quality & Safety Department.`,
+    "Disclaimer: This SDS is based on current knowledge and is intended to",
+    "describe the product for safety purposes only. It does not constitute a warranty.",
   ]);
-  return y;
-}
-
-/* ════════════════════════════════════════════════════════
-   PAGE MANAGER – handles auto page breaks
-   ════════════════════════════════════════════════════════ */
-
-const PAGE_BODY_TOP = 48;
-const PAGE_BODY_BOTTOM = 48;
-
-function check_page_break(doc: jsPDF, y: number, needed: number, product_name: string, page_tracker: { current: number }, total_pages: number): number {
-  if (y + needed > PAGE_H - PAGE_BODY_BOTTOM) {
-    doc.addPage();
-    page_tracker.current++;
-    draw_header(doc, product_name, page_tracker.current, total_pages);
-    draw_footer(doc, "1.0", "", "", page_tracker.current);
-    return PAGE_BODY_TOP;
-  }
-  return y;
-}
-
-/* ════════════════════════════════════════════════════════
-   GENERATE SINGLE PRODUCT SDS
-   ════════════════════════════════════════════════════════ */
-
-export function generate_product_sds_pdf(
-  product: ParsedProduct,
-  settings: SdsSettings
-): jsPDF {
-  const doc = new jsPDF({ format: "letter", unit: "pt" });
-  const total_pages = 7;
-  const page_tracker = { current: 1 };
-
-  const product_name = product.product_name;
-  const date = settings.kit_info.issue_date;
-  const supplier = settings.kit_info.supplier_name;
-  const version = settings.kit_info.version;
-
-  // ── Helper to add header/footer per page ──
-  function setup_page(doc: jsPDF) {
-    draw_header(doc, product_name, page_tracker.current, total_pages);
-    draw_footer(doc, version, date, supplier, page_tracker.current);
-  }
-
-  setup_page(doc);
-
-  // ── Page 1: Section 1 ──
-  let y = PAGE_BODY_TOP;
-  y = section1_content(doc, y, product, settings);
-  y += 40;
-
-  // Check if we need to fill the page or add sections 2-3 on next
-  // For a nice layout, sections 2-3 go on page 2
-  doc.addPage();
-  page_tracker.current++;
-  setup_page(doc);
-  y = PAGE_BODY_TOP;
-
-  // ── Page 2: Sections 2 + 3 ──
-  y = section2_content(doc, y);
-  y = check_page_break(doc, y, 60, product_name, page_tracker, total_pages);
-  y = section3_content(doc, y, product);
-  y = check_page_break(doc, y, 60, product_name, page_tracker, total_pages);
-
-  // ── Page 3: Sections 4 + 5 + 6 ──
-  doc.addPage();
-  page_tracker.current++;
-  setup_page(doc);
-  y = PAGE_BODY_TOP;
-  y = section4_content(doc, y);
-  y = check_page_break(doc, y, 40, product_name, page_tracker, total_pages);
-  y = section5_content(doc, y);
-  y = check_page_break(doc, y, 40, product_name, page_tracker, total_pages);
-  y = section6_content(doc, y);
-  y = check_page_break(doc, y, 60, product_name, page_tracker, total_pages);
-
-  // ── Page 4: Sections 7 + 8 ──
-  doc.addPage();
-  page_tracker.current++;
-  setup_page(doc);
-  y = PAGE_BODY_TOP;
-  y = section7_content(doc, y);
-  y = check_page_break(doc, y, 60, product_name, page_tracker, total_pages);
-  y = section8_content(doc, y);
-  y = check_page_break(doc, y, 60, product_name, page_tracker, total_pages);
-
-  // ── Page 5: Section 9 (Physical Properties - large table) ──
-  doc.addPage();
-  page_tracker.current++;
-  setup_page(doc);
-  y = PAGE_BODY_TOP;
-  y = section9_content(doc, y, settings);
-  y = check_page_break(doc, y, 60, product_name, page_tracker, total_pages);
-
-  // ── Page 6: Sections 10 + 11 + 12 + 13 ──
-  doc.addPage();
-  page_tracker.current++;
-  setup_page(doc);
-  y = PAGE_BODY_TOP;
-  y = section10_content(doc, y);
-  y = check_page_break(doc, y, 40, product_name, page_tracker, total_pages);
-  y = section11_content(doc, y);
-  y = check_page_break(doc, y, 40, product_name, page_tracker, total_pages);
-  y = section12_content(doc, y);
-  y = check_page_break(doc, y, 40, product_name, page_tracker, total_pages);
-  y = section13_content(doc, y);
-  y = check_page_break(doc, y, 60, product_name, page_tracker, total_pages);
-
-  // ── Page 7: Sections 14 + 15 + 16 ──
-  doc.addPage();
-  page_tracker.current++;
-  setup_page(doc);
-  y = PAGE_BODY_TOP;
-  y = section14_content(doc, y, settings);
-  y = check_page_break(doc, y, 60, product_name, page_tracker, total_pages);
-  y = section15_content(doc, y, settings);
-  y = check_page_break(doc, y, 60, product_name, page_tracker, total_pages);
-  y = section16_content(doc, y, settings);
 
   return doc;
 }
 
-/* ════════════════════════════════════════════════════════
-   GENERATE PACKAGE SDS  (cover index + merged PDFs)
-   ════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════
+   PACKAGE COVER PAGE
+   ════════════════════════════════════════════════════ */
 
-/**
- * Generate a cover page as a jspdf document for the package index.
- */
-export function generate_package_cover_page(
-  products: ParsedProduct[],
-  settings: SdsSettings
-): jsPDF {
-  const doc = new jsPDF({ format: "letter", unit: "pt" });
+function generate_package_cover(products: ParsedProduct[], settings: SdsSettings): jsPDF {
   const ki = settings.kit_info;
-  const total_products = products.length;
+  const doc = new jsPDF({ format: "letter", unit: "pt" });
+  const d = doc;
 
-  let y = PAGE_BODY_TOP + 40;
+  let y = BODY_TOP + 40;
 
-  doc.setFont(FONT_BOLD, "bold");
-  doc.setFontSize(20);
-  doc.setTextColor(...COLOR_DARK_BLUE);
-  doc.text("SAFETY DATA SHEET PACKAGE", PAGE_W / 2, y, { align: "center" });
-  y += 30;
-
-  doc.setDrawColor(...COLOR_DARK_BLUE);
-  doc.setLineWidth(0.5);
-  doc.line(MARGIN, y, PAGE_W - MARGIN, y);
+  d.setFont("helvetica", "bold");
+  d.setFontSize(20);
+  d.setTextColor(...DARK_BLUE);
+  d.text("SAFETY DATA SHEET PACKAGE", W / 2, y, { align: "center" });
+  y += 20;
+  d.setDrawColor(...DARK_BLUE);
+  d.setLineWidth(0.5);
+  d.line(M + 20, y, W - M - 20, y);
   y += 16;
 
-  doc.setFont(FONT_NORMAL, "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(0, 0, 0);
-  const info_items: [string, string][] = [
+  // Kit info
+  const ctx = new PageContext(doc, "Package Index", ki.version, ki.issue_date, ki.supplier_name, 1);
+  ctx.drawHeader();
+  ctx.drawFooter();
+  ctx.y = y;
+
+  infoTable(ctx, [
     ["Kit Name", ki.kit_name],
     ["ASIN", ki.asin],
     ["Supplier Name", ki.supplier_name],
     ["Issue Date", ki.issue_date],
-    ["Total Products", String(total_products)],
-  ];
-  for (const [label, value] of info_items) {
-    y = draw_kv_row(doc, y, label, value, 100);
-  }
-  y += 10;
+  ], 100);
 
-  doc.setFont(FONT_BOLD, "bold");
-  doc.setFontSize(FONT_SIZE_SECTION);
-  doc.setTextColor(...COLOR_DARK_BLUE);
-  doc.text("Product List", MARGIN, y);
-  y += 10;
+  ctx.y += 4;
+  sectionTitle(ctx, "Product List");
+  ctx.y += 2;
 
-  const list_body = products.map((p, i) => [
-    String(i + 1),
-    p.product_name,
-    `${ki.report_number_prefix}-${p.section.replace(".", "")}`,
-    "Word document",
-  ]);
+  dataTable(ctx,
+    ["No.", "Product Name", "Report No.", "Ingredients Source"],
+    products.map((p, i) => [
+      String(i + 1),
+      p.product_name,
+      `${ki.report_number_prefix}-${p.section.replace(".", "")}`,
+      "Word document",
+    ]),
+    [30, 210, 140, 110]
+  );
 
-  autoTable(doc, {
-    startY: y,
-    head: [["No.", "Product Name", "Report No.", "Ingredients Source"]],
-    body: list_body,
-    theme: "grid",
-    headStyles: { fillColor: [...COLOR_LIGHT_BLUE], textColor: 0, fontStyle: "bold", fontSize: 7, cellPadding: 2 },
-    bodyStyles: { fontSize: 7, cellPadding: 2 },
-    columnStyles: {
-      0: { cellWidth: 30 },
-      1: { cellWidth: 200 },
-      2: { cellWidth: 140 },
-      3: { cellWidth: 130 },
-    },
-    margin: { left: MARGIN, right: MARGIN },
-    tableWidth: CONTENT_W,
-  });
-
-  doc.setFont(FONT_NORMAL, "normal");
-  doc.setFontSize(7);
-  doc.setTextColor(...COLOR_GRAY);
-  doc.text("This Safety Data Sheet Package contains individual SDS documents for each product listed above.",
-    MARGIN, (doc as any).lastAutoTable.finalY + 12);
-  doc.text("Each product SDS follows the GHS/UN 16-section format (16th Edition, 2026).",
-    MARGIN, (doc as any).lastAutoTable.finalY + 22);
+  ctx.y += 10;
+  d.setTextColor(...GRAY);
+  d.setFont("helvetica", "normal");
+  d.setFontSize(7);
+  d.text("This package contains individual SDS documents for each product listed above.", M, ctx.y);
+  ctx.y += 10;
+  d.text(`Total Products: ${products.length}    |    GHS/UN 16th Edition (2026)`, M, ctx.y);
 
   return doc;
 }
 
-/** Convert a jspdf blob to Uint8Array for pdf-lib */
-async function jsdoc_to_bytes(doc: jsPDF): Promise<Uint8Array> {
+/* ════════════════════════════════════════════════════
+   VALIDATION
+   ════════════════════════════════════════════════════ */
+
+const PLACEHOLDER_PATTERNS = [
+  /liquid\s*component\s*\d/i,
+  /to\s*be\s*confirmed/i,
+  /supplier\s*confirmation/i,
+  /\bTBC\b/i,
+];
+
+export interface ValidationResult {
+  valid: boolean;
+  errors: string[];
+}
+
+export function validate_for_generation(
+  products: ParsedProduct[],
+  settings: SdsSettings
+): ValidationResult {
+  const errors: string[] = [];
+  for (const p of products) {
+    if (!p.product_name.trim()) errors.push(`${p.section}: Product name is empty`);
+    if (p.ingredients.length === 0) errors.push(`${p.section}: No ingredients`);
+    if (Math.abs(p.percentage_total - 100) > 0.01)
+      errors.push(`${p.section}: Total is ${p.percentage_total}% (must be 100%)`);
+    for (const ing of p.ingredients) {
+      for (const pat of PLACEHOLDER_PATTERNS) {
+        if (pat.test(ing.chemical_composition))
+          errors.push(`${p.section}: "${ing.chemical_composition}" contains placeholder text`);
+      }
+    }
+  }
+  if (!settings.kit_info.supplier_name.trim()) errors.push("Supplier Name is empty");
+  return { valid: errors.length === 0, errors };
+}
+
+/* ════════════════════════════════════════════════════
+   OUTPUT: merge, ZIP, download
+   ════════════════════════════════════════════════════ */
+
+async function docToBytes(doc: jsPDF): Promise<Uint8Array> {
   const blob = doc.output("blob");
   const buf = await blob.arrayBuffer();
   return new Uint8Array(buf);
 }
 
-/**
- * Generate a single combined PDF containing:
- * 1. Package index (cover page)
- * 2. Each product's full SDS
- */
-export async function generate_package_sds_pdf_merged(
+export async function generate_package_merged(
   products: ParsedProduct[],
   settings: SdsSettings
 ): Promise<Blob> {
-  // 1. Generate cover page
-  const cover_doc = generate_package_cover_page(products, settings);
-  const cover_bytes = await jsdoc_to_bytes(cover_doc);
-
-  // 2. Generate each product PDF as blob
-  const product_docs = products.map((p) => generate_product_sds_pdf(p, settings));
-  const all_blobs = [cover_bytes, ...(await Promise.all(product_docs.map(jsdoc_to_bytes)))];
-
-  // 3. Merge all using pdf-lib
-  const merged_pdf = await PDFDocument.create();
-
-  for (const bytes of all_blobs) {
+  const cover = generate_package_cover(products, settings);
+  const coverBytes = await docToBytes(cover);
+  const pBytes = await Promise.all(
+    products.map((p) => generate_product_sds_pdf(p, settings)).map(docToBytes)
+  );
+  const merged = await PDFDocument.create();
+  for (const bytes of [coverBytes, ...pBytes]) {
     const src = await PDFDocument.load(bytes);
-    const pages = await merged_pdf.copyPages(src, src.getPageIndices());
-    for (const page of pages) {
-      merged_pdf.addPage(page);
-    }
+    const pages = await merged.copyPages(src, src.getPageIndices());
+    for (const p of pages) merged.addPage(p);
   }
-
-  const merged_bytes = await merged_pdf.save();
-  const blob_array = merged_bytes as unknown as BlobPart;
-  return new Blob([blob_array], { type: "application/pdf" });
+  const out = await merged.save();
+  return new Blob([out as unknown as BlobPart], { type: "application/pdf" });
 }
 
-/**
- * Generate all SDS outputs:
- * - Individual product PDFs
- * - Combined package PDF
- * - ZIP containing all PDFs
- */
 export async function generate_all_sds_outputs(
   products: ParsedProduct[],
   settings: SdsSettings
@@ -914,24 +688,22 @@ export async function generate_all_sds_outputs(
   zip_blob: Blob;
 }> {
   const zip = new JSZip();
-  const kit_name = settings.kit_info.kit_name.replace(/[^a-zA-Z0-9_-]/g, "_");
   const product_pdfs: { product_name: string; blob: Blob }[] = [];
 
-  // Generate individual product PDFs
-  for (const product of products) {
-    const doc = generate_product_sds_pdf(product, settings);
+  // Individual PDFs
+  for (const p of products) {
+    const doc = generate_product_sds_pdf(p, settings);
     const blob = doc.output("blob");
-    const safe_name = product.product_name.replace(/[^a-zA-Z0-9_-]/g, "_");
-    product_pdfs.push({ product_name: safe_name, blob });
-    zip.file(`${safe_name}_SDS.pdf`, blob);
+    const safe = p.product_name.replace(/[^a-zA-Z0-9_-]/g, "_");
+    product_pdfs.push({ product_name: safe, blob });
+    zip.file(`${safe}_SDS.pdf`, blob);
   }
 
-  // Generate combined package PDF
-  const package_blob = await generate_package_sds_pdf_merged(products, settings);
-  zip.file(`${kit_name}_SDS_Package.pdf`, package_blob);
+  // Merged package PDF
+  const pkg = await generate_package_merged(products, settings);
+  const kName = settings.kit_info.kit_name.replace(/[^a-zA-Z0-9_-]/g, "_");
+  zip.file(`${kName}_SDS_Package.pdf`, pkg);
 
-  // Generate ZIP
-  const zip_blob = await zip.generateAsync({ type: "blob" });
-
-  return { product_pdfs, package_pdf_blob: package_blob, zip_blob };
+  const zipBlob = await zip.generateAsync({ type: "blob" });
+  return { product_pdfs, package_pdf_blob: pkg, zip_blob: zipBlob };
 }
