@@ -60,8 +60,6 @@ class Pg {
     const pn = this.pName.length > 45 ? this.pName.slice(0, 43) + ".." : this.pName;
     d.text(pn, W / 2, 13, { align: "center" });
     d.text("GHS/UN 16th Edition (2026)", W - M, 13, { align: "right" });
-    d.setFontSize(7);
-    d.text(`Page ${this.page} of ${this.total}`, W - M, 23, { align: "right" });
     d.setDrawColor(...LB);
     d.setLineWidth(1);
     d.line(M, HEAD_H, W - M, HEAD_H);
@@ -99,11 +97,6 @@ class Pg {
       d.setTextColor(...GR); d.setFontSize(6.5);
       d.setFont("helvetica", "normal");
       d.text(`Version ${this.ver}  |  Date: ${this.date}  |  Page ${p} of ${total}  |  Supplier: ${sup}`, W / 2, fy + 10, { align: "center" });
-      // Update page counter in header too
-      d.setFillColor(...DB);
-      d.rect(W - M - 80, 10, 80, 26, "F");
-      d.setTextColor(255, 255, 255); d.setFontSize(7);
-      d.text(`Page ${p} of ${total}`, W - M, 23, { align: "right" });
     }
   }
 }
