@@ -189,7 +189,7 @@ function renderS2(ctx: Pg) {
   d.setFillColor(...GNBG); d.setDrawColor(...GN); d.setLineWidth(1);
   d.rect(M, ctx.y, CW, 18, "FD");
   d.setTextColor(...GN); d.setFontSize(9); d.setFont("helvetica", "bold");
-  d.text("✓  NOT CLASSIFIED AS HAZARDOUS  ✓", W / 2, ctx.y + 12.5, { align: "center" });
+  d.text("NOT CLASSIFIED AS HAZARDOUS", W / 2, ctx.y + 12.5, { align: "center" });
   ctx.y += 22;
 
   // GHS Classification sub-title
@@ -276,7 +276,7 @@ function renderS4(ctx: Pg) {
 
 function renderS5(ctx: Pg) {
   sectionKV(ctx, "SECTION 5 — Fire-Fighting Measures", [
-    ["Extinguishing Media", "Suitable: Water spray, foam, dry chemical, CO₂. Unsuitable: Not applicable."],
+    ["Extinguishing Media", "Suitable: Water spray, foam, dry chemical, CO2. Unsuitable: Not applicable."],
     ["Special Hazards", "Non-flammable. No hazardous combustion products under normal fire conditions."],
     ["Advice for Firefighters", "Wear self-contained breathing apparatus (SCBA) and full protective clothing as a precaution."],
   ]);
@@ -474,15 +474,18 @@ function genProductSDS(product: ParsedProduct, s: SdsSettings, bottle?: string):
   ctx.y = y;
   renderS1(ctx, product, s);
 
-  // Stamp image
+  // Stamp image – floating overlay, top-right, no border/background
   if (ki.company_stamp_data_url) {
     try {
       const parts = ki.company_stamp_data_url.split(",");
       if (parts.length === 2) {
-        const ix = W - M - 80; const iy = 95; const iw = 76; const ih = 38;
-        d.setFillColor(255, 255, 255); d.rect(ix - 2, iy - 2, iw + 4, ih + 4, "F");
-        d.setDrawColor(...BC); d.setLineWidth(0.3); d.rect(ix - 2, iy - 2, iw + 4, ih + 4, "S");
-        d.addImage(parts[1], "PNG", ix, iy, iw, ih);
+        const stamp_w = 76;
+        const stamp_x = 500;
+        const stamp_y = 62;
+        // Preserve aspect ratio: typical stamp/signature ~ 2:1 width:height
+        const stamp_h = 40;
+        // Draw directly - no border, no white background, rgba PNG transparent
+        d.addImage(parts[1], "PNG", stamp_x, stamp_y, stamp_w, stamp_h);
       }
     } catch { /* ignore */ }
   }
