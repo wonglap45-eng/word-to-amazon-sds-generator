@@ -15,6 +15,7 @@ import { StepIndicator } from "@/components/step-indicator";
 import { FileUpload } from "@/components/file-upload";
 import { ParsedDataEditor, all_products_valid } from "@/components/parsed-data-editor";
 import { SdsSettingsForm } from "@/components/sds-settings-form";
+import { GenerateSdsView } from "@/components/generate-sds-view";
 import { parse_docx } from "@/lib/parse-docx";
 import type {
   WizardStep,
@@ -368,9 +369,12 @@ export default function Home() {
               />
             )}
 
-            {/* ── Step 4: Generate PDF (placeholder) ── */}
-            {active_step === 4 && (
-              <StepPlaceholder step={active_step} />
+            {/* ── Step 4: Generate PDF ── */}
+            {active_step === 4 && parsed_data && (
+              <GenerateSdsView
+                parsed_data={parsed_data}
+                settings={sds_settings}
+              />
             )}
           </CardContent>
         </Card>
