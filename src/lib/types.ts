@@ -32,6 +32,7 @@ export interface Ingredient {
   cas_number: string;
   percentage: number | null; // null if not parseable
   percentage_raw: string;    // original text e.g. "82%", "N/A"
+  is_cas_auto_filled?: boolean; // true if CAS was filled from lookup table
 }
 
 /** A product extracted from the Word document */

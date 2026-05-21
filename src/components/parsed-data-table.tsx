@@ -68,7 +68,8 @@ function ProductCard({ product, index }: { product: ParsedProduct; index: number
   const badge = total_badge(product.percentage_total);
   const total_ok = Math.abs(product.percentage_total - 100) < 0.01;
   const has_missing = product.ingredients.some((i) => i.percentage === null);
-  const has_empty_cas = product.ingredients.some((i) => !i.cas_number);
+  const cas_auto_filled_count = product.ingredients.filter((i) => i.is_cas_auto_filled).length;
+  const has_empty_cas = product.ingredients.some((i) => !i.cas_number && !i.is_cas_auto_filled);
   const row_count = product.ingredients.length;
 
   return (
@@ -85,7 +86,8 @@ function ProductCard({ product, index }: { product: ParsedProduct; index: number
             <p className="text-xs text-muted-foreground mt-1.5">
               {row_count} ingredient{row_count > 1 ? "s" : ""}
               {has_missing && " · Some percentages unreadable"}
-              {has_empty_cas && " · Some CAS numbers missing"}
+              {cas_auto_filled_count > 0 && ` · ${cas_auto_filled_count} CAS auto-filled`}
+              {has_empty_cas && " · Some CAS numbers still missing"}
             </p>
           </div>
 
@@ -136,7 +138,16 @@ function ProductCard({ product, index }: { product: ParsedProduct; index: number
                       {ing.chemical_composition}
                     </td>
                     <td className="px-4 py-2 text-muted-foreground">
-                      {ing.cas_number || (
+                      {ing.cas_number ? (
+                        <span className={cn(
+                          ing.is_cas_auto_filled && "text-blue-600 dark:text-blue-400"
+                        )}>
+                          {ing.cas_number}
+                          {ing.is_cas_auto_filled && (
+                            <span className="ml-1 text-[10px] text-blue-500 dark:text-blue-400">auto</span>
+                          )}
+                        </span>
+                      ) : (
                         <span className="italic text-muted-foreground/60">
                           N/A
                         </span>

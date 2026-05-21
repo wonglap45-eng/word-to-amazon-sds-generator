@@ -5,10 +5,14 @@
  * mammoth outputs each table cell on its own line, so the
  * parser handles line-based format where ingredient rows
  * appear as pairs/spans of (chemical_name) ... (percentage).
+ *
+ * After parsing, empty CAS numbers are auto-filled from the
+ * built-in CAS lookup table (src/lib/cas-lookup.ts).
  * ============================================================ */
 
 import * as mammoth from "mammoth";
 import type { ParsedProduct, ParsedSdsData, Ingredient } from "@/lib/types";
+import { lookup_cas } from "@/lib/cas-lookup";
 
 /* ───── Regex patterns ───── */
 
@@ -257,6 +261,19 @@ export function parse_products(raw_text: string): ParsedSdsData {
   if (current_product) {
     post_process_product(current_product);
     products.push(current_product);
+  }
+
+  // ── Auto-fill missing CAS numbers from lookup table ──
+  for (const product of products) {
+    for (const ing of product.ingredients) {
+      if (!ing.cas_number || ing.cas_number.trim() === "") {
+        const found_cas = lookup_cas(ing.chemical_composition);
+        if (found_cas !== null) {
+          ing.cas_number = found_cas;
+          ing.is_cas_auto_filled = true;
+        }
+      }
+    }
   }
 
   return {
