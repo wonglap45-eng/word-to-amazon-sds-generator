@@ -2,8 +2,6 @@
  * Word to Amazon SDS Generator - Type Definitions
  *
  * These types define the core data model for the entire app.
- * They will be extended in later phases as parsing, SDS generation,
- * and ZIP export features are implemented.
  * ============================================================ */
 
 /** 4-step wizard step indices */
@@ -18,60 +16,68 @@ export type UploadStatus =
 
 /** Uploaded file metadata */
 export interface UploadedFile {
-  /** File name */
   name: string;
-  /** File size in bytes */
   size: number;
-  /** Upload status */
   status: UploadStatus;
-  /** Error message if status === "error" */
   error_message?: string;
-  /** Raw File object for later processing */
   file: File;
-  /** Timestamp when uploaded */
   uploaded_at: string;
 }
 
-/**
- * Parsed SDS data — placeholder.
- * In Phase 2, this will hold structured data extracted from the Word docx.
- */
+/* ───────── Parsed Product / Ingredient Types ───────── */
+
+/** A single ingredient row from the composition table */
+export interface Ingredient {
+  chemical_composition: string;
+  cas_number: string;
+  percentage: number | null; // null if not parseable
+  percentage_raw: string;    // original text e.g. "82%", "N/A"
+}
+
+/** A product extracted from the Word document */
+export interface ParsedProduct {
+  /** Section number e.g. "3.1" */
+  section: string;
+  /** Product name e.g. "GOLF GRIP CLEANER" */
+  product_name: string;
+  /** Extracted ingredient rows */
+  ingredients: Ingredient[];
+  /** Sum of all valid percentages */
+  percentage_total: number;
+}
+
+/** Full parse result */
 export interface ParsedSdsData {
-  sections: SdsSection[];
+  products: ParsedProduct[];
+  /** Raw text extracted from the document */
+  raw_text: string;
+  /** Timestamp of parse */
+  parsed_at: string;
 }
 
-export interface SdsSection {
-  title: string;
-  content: string;
-}
+/* ───────── SDS Settings (Phase 3) ───────── */
 
-/**
- * SDS generation settings — placeholder.
- * In Phase 3, this will hold user-configurable SDS generation options.
- */
 export interface SdsSettings {
   language: "en" | "zh";
   include_toc: boolean;
   output_format: "pdf" | "zip";
 }
 
-/**
- * SDS generation result — placeholder.
- * In Phase 4, this will hold the final output.
- */
-export interface SdsResult {
-  pdf_url?: string;
-  zip_url?: string;
-}
-
-/** Default SDS settings */
 export const DEFAULT_SDS_SETTINGS: SdsSettings = {
   language: "en",
   include_toc: true,
   output_format: "pdf",
 };
 
-/** Application-wide state */
+/* ───────── SDS Result (Phase 4) ───────── */
+
+export interface SdsResult {
+  pdf_url?: string;
+  zip_url?: string;
+}
+
+/* ───────── Application State ───────── */
+
 export interface AppState {
   active_step: WizardStep;
   uploaded_file: UploadedFile | null;
