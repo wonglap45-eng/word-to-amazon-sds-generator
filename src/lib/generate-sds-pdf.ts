@@ -10,7 +10,7 @@
  * ============================================================ */
 
 import { jsPDF } from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 import JSZip from "jszip";
 import { PDFDocument } from "pdf-lib";
 import type {
@@ -280,7 +280,7 @@ function section2_content(doc: jsPDF, start_y: number): number {
     ["Precautionary Statements", "None (general handling only)"],
   ];
 
-  (doc as any).autoTable({
+  autoTable(doc, {
     startY: y,
     head: [["Category", "Description"]],
     body: table_data,
@@ -328,7 +328,7 @@ function section3_content(
     ing.percentage !== null ? `${ing.percentage}%` : ing.percentage_raw || "—",
   ]);
 
-  (doc as any).autoTable({
+  autoTable(doc, {
     startY: y,
     head: [["#", "Chemical Composition", "CAS No.", "Percentage"]],
     body,
@@ -388,7 +388,7 @@ function section4_content(doc: jsPDF, start_y: number): number {
     ["Ingestion", "Rinse mouth with water. Do NOT induce vomiting. Seek medical attention if symptoms develop."],
   ];
 
-  (doc as any).autoTable({
+  autoTable(doc, {
     startY: y,
     head: [["Route of Exposure", "First-Aid Measures"]],
     body: table,
@@ -447,7 +447,7 @@ function section8_content(doc: jsPDF, start_y: number): number {
     ["Not established for this mixture", "N/E", "N/E", "N/E"],
   ];
 
-  (doc as any).autoTable({
+  autoTable(doc, {
     startY: y,
     head: [["Component", "ACGIH TLV (ppm)", "OSHA PEL (ppm)", "Biological Exposure Index"]],
     body: table.slice(1),
@@ -497,7 +497,7 @@ function section9_content(doc: jsPDF, start_y: number, settings: SdsSettings): n
 
   const body = props.map(([label, value]) => [label, value]);
 
-  (doc as any).autoTable({
+  autoTable(doc, {
     startY: y,
     head: [["Property", "Value"]],
     body,
@@ -587,7 +587,7 @@ function section14_content(doc: jsPDF, start_y: number, settings: SdsSettings): 
 
   const body = items.map(([label, value]) => [label, value]);
 
-  (doc as any).autoTable({
+  autoTable(doc, {
     startY: y,
     head: [["Transport Category", "Information"]],
     body,
@@ -617,7 +617,7 @@ function section15_content(doc: jsPDF, start_y: number, settings: SdsSettings): 
 
   const body = items.map(([label, value]) => [label, value]);
 
-  (doc as any).autoTable({
+  autoTable(doc, {
     startY: y,
     head: [["Regulation", "Status"]],
     body,
@@ -831,7 +831,7 @@ export function generate_package_cover_page(
     "Word document",
   ]);
 
-  (doc as any).autoTable({
+  autoTable(doc, {
     startY: y,
     head: [["No.", "Product Name", "Report No.", "Ingredients Source"]],
     body: list_body,
