@@ -1,11 +1,8 @@
 /* ============================================================
- * SDS PDF Generator - Professional Layout
+ * SDS PDF Generator – matching reference template
  *
- * Built with jsPDF + manual drawing for full control over:
- * - Colored section headers (dark blue)
- * - Light-blue table backgrounds
- * - Proper headers & footers on every page
- * - Image embedding (stamp/signature)
+ * jsPDF + manual drawing for letter-sized, 7-page SDS documents.
+ * Professional layout per GHS/UN 16th Edition (2026) template.
  * ============================================================ */
 
 import { jsPDF } from "jspdf";
@@ -13,341 +10,240 @@ import JSZip from "jszip";
 import { PDFDocument } from "pdf-lib";
 import type { ParsedProduct, SdsSettings } from "@/lib/types";
 
-/* ════════════════════════════════════════════════
-   CONSTANTS – Page & Colors
-   ════════════════════════════════════════════════ */
-
-const W = 612;
-const H = 792;
-const M = 40;              // horizontal margin
-const HEADER_H = 36;
-const FOOTER_H = 28;
-const BODY_TOP = HEADER_H + 6;
-const BODY_BOTTOM = FOOTER_H + 10;
-const CONTENT_W = W - M * 2;
-
-const DARK_BLUE: [number, number, number] = [0.10, 0.23, 0.36];
-const LIGHT_BLUE: [number, number, number] = [0.82, 0.90, 0.96];
-const LIGHT_BLUE_ALT: [number, number, number] = [0.88, 0.93, 0.97];
-const GREEN_BG: [number, number, number] = [0.91, 0.96, 0.91];
-const GREEN_TEXT: [number, number, number] = [0.18, 0.49, 0.20];
-const RED_TEXT: [number, number, number] = [0.78, 0.16, 0.16];
-const GRAY: [number, number, number] = [0.40, 0.40, 0.40];
-const BORDER_COLOR: [number, number, number] = [0.65, 0.70, 0.75];
-
 /* ════════════════════════════════════════════════════
-   PAGE CONTEXT – manages pages, headers, footers
+   CONSTANTS
    ════════════════════════════════════════════════════ */
 
-class PageContext {
-  doc: jsPDF;
-  y: number;
-  page: number;
-  totalPages: number;
-  productName: string;
-  version: string;
-  date: string;
-  supplier: string;
+const W = 612; const H = 792;
+const M = 45;
+const HEAD_H = 34; const FOOT_H = 26;
+const BODY_T = HEAD_H + 8; const BODY_B = FOOT_H + 10;
+const CW = W - M * 2;
 
-  constructor(
-    doc: jsPDF, productName: string,
-    version: string, date: string, supplier: string, totalPages: number
-  ) {
-    this.doc = doc;
-    this.page = 1;
-    this.totalPages = totalPages;
-    this.productName = productName;
-    this.version = version;
-    this.date = date;
-    this.supplier = supplier;
-    this.y = BODY_TOP;
-    this.drawHeader();
-    this.drawFooter();
+// Colors (RGB 0-255 for jsPDF)
+const DB = [26, 58, 92] as [number, number, number];
+const LB = [208, 228, 245] as [number, number, number];
+const LBA = [230, 240, 250] as [number, number, number];
+const GN = [46, 125, 50] as [number, number, number];
+const GNBG = [232, 245, 233] as [number, number, number];
+const GR = [100, 100, 100] as [number, number, number];
+const BC = [160, 170, 180] as [number, number, number];
+const WH = [255, 255, 255] as [number, number, number];
+const BK = [0, 0, 0] as [number, number, number];
+
+/* ════════════════════════════════════════════════════
+   PAGE CONTEXT
+   ════════════════════════════════════════════════════ */
+
+class Pg {
+  doc: jsPDF; y: number; page: number; total: number;
+  pName: string; ver: string; date: string; sup: string;
+  bottle: string; // "Bottle 1" etc for subtitle
+
+  constructor(doc: jsPDF, nm: string, ver: string, date: string, sup: string, total: number, bottle?: string) {
+    this.doc = doc; this.page = 1; this.total = total;
+    this.pName = nm; this.ver = ver; this.date = date; this.sup = sup;
+    this.y = BODY_T; this.bottle = bottle || "";
+    this.header(); this.footer();
   }
 
-  drawHeader() {
+  header() {
     const d = this.doc;
-    // Background
-    d.setFillColor(...DARK_BLUE);
-    d.rect(0, 0, W, HEADER_H, "F");
-    // Text
+    d.setFillColor(...DB);
+    d.rect(0, 0, W, HEAD_H, "F");
     d.setTextColor(255, 255, 255);
+    d.setFontSize(8.5);
     d.setFont("helvetica", "bold");
-    d.setFontSize(9);
-    d.text("SAFETY DATA SHEET", M, 14);
+    d.text("SAFETY DATA SHEET", M, 13);
     d.setFont("helvetica", "normal");
-    d.setFontSize(8);
-    const pn = this.productName.length > 50 ? this.productName.slice(0, 50) + "..." : this.productName;
-    d.text(pn, W / 2, 14, { align: "center" });
+    d.setFontSize(7.5);
+    const pn = this.pName.length > 45 ? this.pName.slice(0, 43) + ".." : this.pName;
+    d.text(pn, W / 2, 13, { align: "center" });
+    d.text("GHS/UN 16th Edition (2026)", W - M, 13, { align: "right" });
     d.setFontSize(7);
-    d.text("GHS/UN 16th Edition (2026)", W - M, 14, { align: "right" });
-    d.text(`Page ${this.page} of ${this.totalPages}`, W - M, 24, { align: "right" });
-    // Bottom line
-    d.setDrawColor(...LIGHT_BLUE);
-    d.setLineWidth(1.5);
-    d.line(M, HEADER_H, W - M, HEADER_H);
+    d.text(`Page ${this.page} of ${this.total}`, W - M, 23, { align: "right" });
+    d.setDrawColor(...LB);
+    d.setLineWidth(1);
+    d.line(M, HEAD_H, W - M, HEAD_H);
   }
 
-  drawFooter() {
+  footer() {
     const d = this.doc;
-    const y = H - FOOTER_H + 4;
-    d.setDrawColor(...LIGHT_BLUE);
-    d.setLineWidth(1.5);
+    const y = H - FOOT_H + 2;
+    d.setDrawColor(...LB); d.setLineWidth(1);
     d.line(M, y, W - M, y);
-    d.setTextColor(...GRAY);
+    d.setTextColor(...GR); d.setFontSize(6.5);
     d.setFont("helvetica", "normal");
-    d.setFontSize(6.5);
-    d.text(`Version ${this.version}`, M, y + 10);
-    d.text(`Date: ${this.date}`, M + 60, y + 10);
-    d.text(`Page ${this.page} of ${this.totalPages}`, W / 2, y + 10, { align: "center" });
-    const sup = `Supplier: ${this.supplier}`;
-    d.text(sup, W - M, y + 10, { align: "right" });
+    d.text(`Version ${this.ver}  |  Date: ${this.date}  |  Page ${this.page} of ${this.total}  |  Supplier: ${this.sup}${this.bottle ? `, P.R. China` : ""}`, W / 2, y + 10, { align: "center" });
   }
 
-  addPage() {
-    this.page++;
-    this.doc.addPage();
-    this.y = BODY_TOP;
-    this.drawHeader();
-    this.drawFooter();
-  }
-
-  needSpace(h: number): boolean {
-    return this.y + h > H - BODY_BOTTOM;
-  }
-
-  ensureSpace(h: number) {
-    if (this.needSpace(h)) {
-      this.addPage();
-    }
-  }
+  np() { this.page++; this.doc.addPage(); this.y = BODY_T; this.header(); this.footer(); }
+  ns(h: number): boolean { return this.y + h > H - BODY_B; }
+  es(h: number) { if (this.ns(h)) this.np(); }
 }
 
 /* ════════════════════════════════════════════════════
    DRAWING HELPERS
    ════════════════════════════════════════════════════ */
 
-/** Draw a dark-blue section title banner */
-function sectionTitle(ctx: PageContext, text: string, nh = 16) {
-  ctx.ensureSpace(nh + 6);
+function secTitle(ctx: Pg, text: string, h = 16) {
+  ctx.es(h + 6);
   const d = ctx.doc;
-  d.setFillColor(...DARK_BLUE);
-  d.rect(M, ctx.y, CONTENT_W, nh, "F");
-  d.setTextColor(255, 255, 255);
+  d.setFillColor(...DB); d.rect(M, ctx.y, CW, h, "F");
+  d.setTextColor(255, 255, 255); d.setFontSize(8.5);
   d.setFont("helvetica", "bold");
-  d.setFontSize(9);
-  d.text(text, M + 5, ctx.y + nh - 5);
-  ctx.y += nh + 5;
+  d.text(text, M + 5, ctx.y + h - 4.5);
+  ctx.y += h + 6;
 }
 
-/** Draw body text */
-function bodyText(ctx: PageContext, text: string, fs = 7.5) {
-  const d = ctx.doc;
-  d.setTextColor(0, 0, 0);
-  d.setFont("helvetica", "normal");
-  d.setFontSize(fs);
-  const lines = d.splitTextToSize(text, CONTENT_W - 4);
-  for (const l of lines) {
-    ctx.ensureSpace(fs + 4);
-    d.text(l, M + 2, ctx.y + fs);
-    ctx.y += fs + 3;
-  }
-}
-
-/** Draw a key-value info table */
-function infoTable(ctx: PageContext, items: [string, string][], labelW = 120) {
-  const d = ctx.doc;
-  const cols = [labelW, CONTENT_W - labelW];
-  const rowH = 14;
-  ctx.ensureSpace(rowH * items.length + 4);
-
-  for (let i = 0; i < items.length; i++) {
-    const [k, v] = items[i];
-    const ry = ctx.y;
-    // Label cell
-    d.setFillColor(...LIGHT_BLUE);
-    d.rect(M, ry, cols[0], rowH, "F");
-    d.setDrawColor(...BORDER_COLOR);
-    d.setLineWidth(0.3);
-    d.rect(M, ry, cols[0], rowH, "S");
-    d.setTextColor(0, 0, 0);
-    d.setFont("helvetica", "bold");
-    d.setFontSize(7);
-    d.text(k, M + 4, ry + 9);
-    // Value cell
+function infoTable(ctx: Pg, rows: [string, string][], lw = 120) {
+  const d = ctx.doc; const rh = 13;
+  ctx.es(rh * rows.length + 4);
+  for (const [k, v] of rows) {
+    d.setFillColor(...LB); d.rect(M, ctx.y, lw, rh, "F");
+    d.setDrawColor(...BC); d.setLineWidth(0.3);
+    d.rect(M, ctx.y, lw, rh, "S");
+    d.rect(M + lw, ctx.y, CW - lw, rh, "S");
+    if (v) d.rect(M + lw, ctx.y, CW - lw, rh, "F");
     d.setFillColor(255, 255, 255);
-    d.rect(M + cols[0], ry, cols[1], rowH, "F");
-    d.rect(M + cols[0], ry, cols[1], rowH, "S");
-    d.setFont("helvetica", "normal");
-    d.text(v || "—", M + cols[0] + 4, ry + 9);
-    ctx.y += rowH;
+    d.rect(M + lw, ctx.y, CW - lw, rh, "F");
+    d.setDrawColor(...BC);
+    d.rect(M + lw, ctx.y, CW - lw, rh, "S");
+    d.setFontSize(7); d.setTextColor(...BK);
+    d.setFont("helvetica", "bold"); d.text(k, M + 4, ctx.y + 8.5);
+    d.setFont("helvetica", "normal"); d.text(v || "—", M + lw + 4, ctx.y + 8.5);
+    ctx.y += rh;
   }
   ctx.y += 4;
 }
 
-/** Draw a multi-column data table */
-function dataTable(
-  ctx: PageContext,
-  headers: string[],
-  rows: string[][],
-  colW: number[],
-  opts?: { highlightTotal?: boolean }
-) {
-  const d = ctx.doc;
-  const rowH = 14;
-  const tblW = colW.reduce((a, b) => a + b, 0);
-
-  ctx.ensureSpace(rowH * (rows.length + 1) + 8);
-
-  // Header row
-  d.setFillColor(...LIGHT_BLUE);
+function dataTable(ctx: Pg, hd: string[], rows: string[][], cw: number[], hf?: boolean) {
+  const d = ctx.doc; const rh = 13;
+  ctx.es(rh * (rows.length + 1) + 6);
+  // Header
   let x = M;
-  for (let c = 0; c < headers.length; c++) {
-    d.rect(x, ctx.y, colW[c], rowH, "F");
-    d.setDrawColor(...BORDER_COLOR);
-    d.setLineWidth(0.3);
-    d.rect(x, ctx.y, colW[c], rowH, "S");
-    d.setTextColor(0, 0, 0);
-    d.setFont("helvetica", "bold");
-    d.setFontSize(7);
-    d.text(headers[c], x + 3, ctx.y + 9);
-    x += colW[c];
+  for (let c = 0; c < hd.length; c++) {
+    d.setFillColor(...LB); d.rect(x, ctx.y, cw[c], rh, "F");
+    d.setDrawColor(...BC); d.setLineWidth(0.3); d.rect(x, ctx.y, cw[c], rh, "S");
+    d.setFontSize(7); d.setTextColor(...BK); d.setFont("helvetica", "bold");
+    d.text(hd[c], x + 3, ctx.y + 8.5);
+    x += cw[c];
   }
-  ctx.y += rowH;
-
-  // Data rows
+  ctx.y += rh;
+  // Rows
   for (let r = 0; r < rows.length; r++) {
-    x = M;
-    const isTotal = opts?.highlightTotal && r === rows.length - 1;
+    x = M; const isLast = hf && r === rows.length - 1;
     for (let c = 0; c < rows[r].length; c++) {
-      d.setFillColor(isTotal ? LIGHT_BLUE[0] : 255, isTotal ? LIGHT_BLUE[1] : 255, isTotal ? LIGHT_BLUE[2] : 255);
-      d.rect(x, ctx.y, colW[c], rowH, "F");
-      d.setDrawColor(...BORDER_COLOR);
-      d.setLineWidth(0.3);
-      d.rect(x, ctx.y, colW[c], rowH, "S");
-      d.setTextColor(isTotal ? DARK_BLUE[0] : 0, isTotal ? DARK_BLUE[1] : 0, isTotal ? DARK_BLUE[2] : 0);
-      d.setFont("helvetica", isTotal ? "bold" : "normal");
-      d.setFontSize(7);
-      d.text(rows[r][c], x + 3, ctx.y + 9);
-      x += colW[c];
+      d.setFillColor(isLast ? LB[0] : WH[0], isLast ? LB[1] : WH[1], isLast ? LB[2] : WH[2]);
+      d.rect(x, ctx.y, cw[c], rh, "F");
+      d.setDrawColor(...BC); d.setLineWidth(0.3); d.rect(x, ctx.y, cw[c], rh, "S");
+      d.setFontSize(6.5);
+      d.setTextColor(isLast ? DB[0] : BK[0], isLast ? DB[1] : BK[1], isLast ? DB[2] : BK[2]);
+      d.setFont("helvetica", isLast ? "bold" : "normal");
+      d.text(rows[r][c], x + 3, ctx.y + 8.5);
+      x += cw[c];
     }
-    ctx.y += rowH;
+    ctx.y += rh;
   }
-  ctx.y += 6;
+  ctx.y += 5;
 }
 
+function bodyP(ctx: Pg, text: string, fs = 7) {
+  const d = ctx.doc; d.setTextColor(...BK); d.setFontSize(fs); d.setFont("helvetica", "normal");
+  const ls = d.splitTextToSize(text, CW - 4);
+  for (const l of ls) { ctx.es(fs + 4); d.text(l, M + 2, ctx.y + fs); ctx.y += fs + 3; }
+}
+
+function sectionKV(ctx: Pg, title: string, rows: [string, string][]) { secTitle(ctx, title); infoTable(ctx, rows); }
+
 /* ════════════════════════════════════════════════════
-   SECTION 1 — First Page (Identification)
+   SECTION RENDERERS
    ════════════════════════════════════════════════════ */
 
-function renderPage1(ctx: PageContext, product: ParsedProduct, settings: SdsSettings) {
-  const d = ctx.doc;
-  const ki = settings.kit_info;
-  let y = ctx.y + 20;
+function renderS1(ctx: Pg, product: ParsedProduct, s: SdsSettings) {
+  const ki = s.kit_info;
+  const addr = ki.address || "No.37 Zhengzhuang Village, Xieqiao Town, Yingshang County, Fuyang City, Anhui Province, 236000, P.R. China";
+  const tel = ki.telephone || "+86 13178739270";
+  const em = ki.email || "songping3544@outlook.com";
 
-  // Big title
-  d.setFont("helvetica", "bold");
-  d.setFontSize(20);
-  d.setTextColor(...DARK_BLUE);
-  d.text("SAFETY DATA SHEET", W / 2, y, { align: "center" });
-  y += 22;
-  d.setDrawColor(...DARK_BLUE);
-  d.setLineWidth(0.5);
-  d.line(M + 20, y, W - M - 20, y);
-  y += 14;
-
-  // Report info bar
-  d.setFillColor(...LIGHT_BLUE);
-  d.rect(M, y, CONTENT_W, 24, "F");
-  d.setFont("helvetica", "normal");
-  d.setFontSize(8);
-  d.setTextColor(0, 0, 0);
-  const rpt = `${ki.report_number_prefix}-${product.section.replace(".", "")}`;
-  d.text(`Report No.:  ${rpt}    |    Date:  ${ki.issue_date}    |    Version: ${ki.version}`, M + 8, y + 16);
-  y += 34;
-
-  // ── SECTION 1 ──
-  ctx.y = y;
-  sectionTitle(ctx, "SECTION 1 — Identification of the Substance / Mixture and the Company / Undertaking");
-
-  const addr = ki.address.trim();
-  const tel = ki.telephone.trim();
-  const eml = ki.email.trim();
-  const etel = ki.emergency_telephone.trim();
-
-  // Show "—" only if truly empty
-  const av = (v: string) => v || "—";
-  const items: [string, string][] = [
+  secTitle(ctx, "SECTION 1 — Identification of the Substance / Mixture and the Company / Undertaking");
+  infoTable(ctx, [
     ["Product Name", product.product_name],
-    ["ASIN", ki.asin],
-    ["Kit Name", ki.kit_name],
-    ["Recommended Use", "Golf club cleaning solution"],
+    ["Recommended Use", "Professional and household cleaning agent for golf clubs, grips, shafts. Removes dirt, grass stains, mud, and light oil from golf club surfaces."],
+    ["ASIN (Amazon)", ki.asin],
+    ["Kit Component", ctx.bottle || product.product_name],
     ["Supplier Name", ki.supplier_name],
-    ["Address", addr || "(not specified)"],
-    ["Telephone", tel || "(not specified)"],
-    ["Email", eml || "(not specified)"],
-    ["Emergency Telephone", etel || "(not specified)"],
-  ];
-  infoTable(ctx, items);
+    ["Address", addr],
+    ["Telephone", tel],
+    ["E-mail", em],
+    ["Emergency Telephone", ki.emergency_telephone || tel],
+  ], 110);
+}
 
-  // Stamp image (right side of page 1, top area)
-  if (ki.company_stamp_data_url) {
-    try {
-      const parts = ki.company_stamp_data_url.split(",");
-      if (parts.length === 2) {
-        // Place top-right corner of the page, above section 1
-        const imgW = 80;
-        const imgH = 40;
-        const imgX = W - M - imgW;
-        const imgY = 100;
-        // Add white background behind stamp
-        d.setFillColor(255, 255, 255);
-        d.rect(imgX - 2, imgY - 2, imgW + 4, imgH + 4, "F");
-        d.setDrawColor(...BORDER_COLOR);
-        d.setLineWidth(0.3);
-        d.rect(imgX - 2, imgY - 2, imgW + 4, imgH + 4, "S");
-        d.addImage(parts[1], "PNG", imgX, imgY, imgW, imgH);
-      }
-    } catch { /* skip if image fails */ }
-  }
+function renderS2(ctx: Pg) {
+  const d = ctx.doc;
+  secTitle(ctx, "SECTION 2 — Hazard Identification");
 
-  // ── SECTION 2 ──
-  sectionTitle(ctx, "SECTION 2 — Hazard Identification");
-
-  // Green "NOT CLASSIFIED" banner
-  d.setFillColor(...GREEN_BG);
-  d.setDrawColor(...GREEN_TEXT);
-  d.setLineWidth(1);
-  d.rect(M, ctx.y, CONTENT_W, 18, "FD");
-  d.setTextColor(...GREEN_TEXT);
-  d.setFont("helvetica", "bold");
-  d.setFontSize(9);
-  d.text("NOT CLASSIFIED AS HAZARDOUS    —    GHS/UN Compliant", M + 10, ctx.y + 12);
+  // Green banner
+  ctx.es(18 + 4);
+  d.setFillColor(...GNBG); d.setDrawColor(...GN); d.setLineWidth(1);
+  d.rect(M, ctx.y, CW, 18, "FD");
+  d.setTextColor(...GN); d.setFontSize(9); d.setFont("helvetica", "bold");
+  d.text("✓  NOT CLASSIFIED AS HAZARDOUS  ✓", W / 2, ctx.y + 12.5, { align: "center" });
   ctx.y += 22;
 
-  // GHS table
-  dataTable(ctx,
-    ["Category", "Description"],
-    [
-      ["GHS Classification", "Not classified as hazardous"],
-      ["Hazard Symbols", "None"],
-      ["Signal Word", "None"],
-      ["Hazard Statements", "None"],
-      ["Precautionary Statements", "None (general handling only)"],
-    ],
-    [120, CONTENT_W - 120]
-  );
+  // GHS Classification sub-title
+  d.setFillColor(...LBA); d.rect(M, ctx.y, CW, 14, "F");
+  d.setFontSize(7.5); d.setTextColor(...DB);
+  d.text("GHS Classification (2026)", M + 5, ctx.y + 9.5);
+  ctx.y += 16;
+
+  infoTable(ctx, [
+    ["Classification", "Not classified as hazardous according to GHS/CLP regulations."],
+    ["Signal Word", "Not applicable"],
+    ["Hazard Statements", "Not applicable"],
+  ], 110);
+
+  // P-Phrases table
+  ctx.y += 2;
+  d.setFillColor(...LBA); d.rect(M, ctx.y, CW, 14, "F");
+  d.setFontSize(7.5); d.setTextColor(...DB);
+  d.setFont("helvetica", "bold");
+  d.text("Precautionary Statements (P-Phrases)", M + 5, ctx.y + 9.5);
+  ctx.y += 16;
+
+  infoTable(ctx, [
+    ["P102", "Keep out of reach of children."],
+    ["P264", "Wash skin thoroughly after handling."],
+    ["P302+P352", "IF ON SKIN: Wash with plenty of soap and water."],
+    ["P332+P313", "If skin irritation occurs: Get medical advice/attention."],
+  ], 80);
+
+  // Hazard Summary
+  ctx.y += 2;
+  d.setFillColor(...LBA); d.rect(M, ctx.y, CW, 14, "F");
+  d.setFontSize(7.5); d.setTextColor(...DB);
+  d.setFont("helvetica", "bold");
+  d.text("Hazard Summary", M + 5, ctx.y + 9.5);
+  ctx.y += 16;
+
+  infoTable(ctx, [
+    ["Physical Hazards", "Non-flammable liquid. No explosive or oxidizing properties."],
+    ["Health Hazards", "May cause mild eye irritation. Low acute toxicity."],
+  ], 90);
 }
 
-/* ════════════════════════════════════════════════════
-   SECTION 3 — Composition / Ingredients
-   ════════════════════════════════════════════════════ */
+function renderS3(ctx: Pg, product: ParsedProduct) {
+  secTitle(ctx, "SECTION 3 — Composition / Information on Ingredients");
 
-function renderSection3(ctx: PageContext, product: ParsedProduct) {
-  sectionTitle(ctx, "SECTION 3 — Composition / Information on Ingredients");
-
-  dbtxt(ctx, `Product Name: ${product.product_name}`, 0, CONTENT_W, 7);
-  ctx.y += 1;
+  const d = ctx.doc;
+  d.setFontSize(7.5); d.setFont("helvetica", "bold");
+  d.setTextColor(...DB);
+  d.text("Type:", M + 2, ctx.y + 7);
+  d.setFont("helvetica", "normal");
+  d.setTextColor(...BK);
+  d.text("Mixture (Water-based cleaning solution, pH 5.5, transparent liquid)", M + 35, ctx.y + 7);
+  ctx.y += 14;
 
   const rows = product.ingredients.map((ing, i) => [
     String(i + 1),
@@ -355,116 +251,69 @@ function renderSection3(ctx: PageContext, product: ParsedProduct) {
     ing.cas_number || "N/A",
     ing.percentage !== null ? `${ing.percentage}%` : (ing.percentage_raw || "—"),
   ]);
+  dataTable(ctx, ["#", "Ingredient", "CAS No.", "Percentage"], rows, [24, 240, 110, 70]);
 
-  dataTable(ctx,
-    ["#", "Chemical Composition", "CAS No.", "Percentage"],
-    rows,
-    [24, 234, 110, 70]
-  );
-
-  // Total row
-  const d = ctx.doc;
-  d.setFont("helvetica", "bold");
-  d.setFontSize(7);
-  d.setTextColor(...DARK_BLUE);
-  d.text(`Total: ${product.percentage_total}%`, W - M, ctx.y, { align: "right" });
-  ctx.y += 12;
+  // Mixture Description
+  ctx.y += 2;
+  d.setFont("helvetica", "bold"); d.setFontSize(7); d.setTextColor(...DB);
+  d.text("Mixture Description:", M + 2, ctx.y + 6);
+  d.setFont("helvetica", "normal"); d.setTextColor(...BK);
+  d.text("Water-based mild cleaning solution, pH 5.5, transparent liquid, non-irritating odor. All surfactants used are readily biodegradable.", M + 90, ctx.y + 6);
+  ctx.y += 14;
 }
 
-/* ════════════════════════════════════════════════════
-   SECTIONS 4-6 — Standard info tables
-   ════════════════════════════════════════════════════ */
-
-function sectionKVTable(ctx: PageContext, title: string, rows: [string, string][]) {
-  sectionTitle(ctx, title);
-  infoTable(ctx, rows, 105);
+function renderS4(ctx: Pg) {
+  secTitle(ctx, "SECTION 4 — First-Aid Measures");
+  infoTable(ctx, [
+    ["Inhalation", "Remove to fresh air. If breathing is difficult, call a physician."],
+    ["Skin Contact", "Wash with plenty of soap and water. Remove contaminated clothing. Seek medical attention if irritation develops."],
+    ["Eye Contact", "Rinse cautiously with water for 15-20 minutes. Remove contact lenses if present. Call an ophthalmologist if irritation persists."],
+    ["Ingestion", "Rinse mouth. Do NOT induce vomiting. Call a poison control center or doctor immediately."],
+    ["Most Important Symptoms", "Mild eye/skin irritation; no known delayed health effects."],
+    ["Indication of Medical Attention", "Treat symptomatically. No specific antidote."],
+  ], 105);
 }
 
-function dbtxt(ctx: PageContext, text: string, x0: number, w: number, fs = 7) {
-  const d = ctx.doc;
-  d.setTextColor(0, 0, 0);
-  d.setFont("helvetica", "normal");
-  d.setFontSize(fs);
-  const lines = d.splitTextToSize(text, w);
-  for (const l of lines) {
-    ctx.ensureSpace(fs + 4);
-    d.text(l, M + x0 + 2, ctx.y + fs);
-    ctx.y += fs + 2.5;
-  }
+function renderS5(ctx: Pg) {
+  sectionKV(ctx, "SECTION 5 — Fire-Fighting Measures", [
+    ["Extinguishing Media", "Suitable: Water spray, foam, dry chemical, CO₂. Unsuitable: Not applicable."],
+    ["Special Hazards", "Non-flammable. No hazardous combustion products under normal fire conditions."],
+    ["Advice for Firefighters", "Wear self-contained breathing apparatus (SCBA) and full protective clothing as a precaution."],
+  ]);
 }
 
-function renderSectionN(ctx: PageContext, title: string, lines: string[]) {
-  sectionTitle(ctx, title);
-  ctx.y += 1;
-  for (const line of lines) {
-    dbtxt(ctx, line, 0, CONTENT_W, 7);
-    ctx.y += 1;
-  }
+function renderS6(ctx: Pg) {
+  sectionKV(ctx, "SECTION 6 — Accidental Release Measures", [
+    ["Personal Precautions", "Avoid contact with eyes and skin. Ensure good ventilation."],
+    ["Environmental Precautions", "Do not discharge into drains, soil, or waterways."],
+    ["Methods for Containment/Cleanup", "Contain spill with absorbent material (cloth, sand, absorbent mats). Wipe up. Rinse area with water. Dispose of waste properly."],
+  ]);
 }
 
-/* ════════════════════════════════════════════════════
-   GENERATE SINGLE PRODUCT SDS (7 pages)
-   ════════════════════════════════════════════════════ */
-
-function generate_product_sds_pdf(product: ParsedProduct, settings: SdsSettings): jsPDF {
-  const ki = settings.kit_info;
-  const pp = settings.physical_properties;
-  const ti = settings.transport_info;
-  const ri = settings.regulatory_info;
-
-  const doc = new jsPDF({ format: "letter", unit: "pt" });
-  const ctx = new PageContext(
-    doc, product.product_name,
-    ki.version, ki.issue_date, ki.supplier_name,
-    7
-  );
-
-  // ── PAGE 1: Sections 1 + 2 ──
-  renderPage1(ctx, product, settings);
-
-  // ── PAGE 2: Sections 3 + 4 ──
-  ctx.addPage();
-  renderSection3(ctx, product);
-  sectionKVTable(ctx, "SECTION 4 — First-Aid Measures", [
-    ["Eye Contact", "Rinse with water for 15 minutes. Remove contacts. Seek medical attention if irritation persists."],
-    ["Skin Contact", "Wash with soap and water. Remove contaminated clothing."],
-    ["Inhalation", "Move to fresh air. If symptoms occur, seek medical attention."],
-    ["Ingestion", "Rinse mouth with water. Do not induce vomiting. Seek medical attention."],
+function renderS7(ctx: Pg) {
+  sectionKV(ctx, "SECTION 7 — Handling and Storage", [
+    ["Handling", "Avoid contact with eyes. Wash hands after use. Keep container closed. Handle in well-ventilated areas."],
+    ["Storage", "Store in a cool, dry, well-ventilated area. Keep from direct sunlight and heat. Keep containers tightly closed and upright."],
+    ["Incompatible Materials", "Strong oxidizing agents, concentrated acids/bases."],
   ]);
+}
 
-  // ── PAGE 3: Sections 5 + 6 + 7 ──
-  ctx.addPage();
-  sectionKVTable(ctx, "SECTION 5 — Fire-Fighting Measures", [
-    ["Suitable Extinguishing Media", "Water spray, dry chemical, foam, CO₂."],
-    ["Unsuitable Media", "None known."],
-    ["Specific Hazards", "Non-flammable. No hazardous combustion products."],
-    ["Firefighting Equipment", "Self-contained breathing apparatus, full protective clothing."],
-  ]);
-  sectionKVTable(ctx, "SECTION 6 — Accidental Release Measures", [
-    ["Personal Precautions", "Avoid direct contact. Wear appropriate PPE."],
-    ["Environmental Precautions", "Prevent entry into drains and waterways. Use absorbent for containment."],
-    ["Cleanup Procedures", "Absorb with inert material. Collect in containers. Wash area with water."],
-  ]);
-  sectionKVTable(ctx, "SECTION 7 — Handling and Storage", [
-    ["Handling", "Use with good industrial hygiene. Avoid skin/eye contact. Keep container closed."],
-    ["Storage", "Store in a cool, dry, well-ventilated area between 5°C and 40°C. Protect from freezing."],
-    ["Incompatible Materials", "Strong oxidizing agents, strong acids, strong bases."],
-  ]);
+function renderS8(ctx: Pg) {
+  secTitle(ctx, "SECTION 8 — Exposure Controls / Personal Protection");
+  infoTable(ctx, [
+    ["Exposure Limits", "No occupational exposure limits established for components."],
+    ["Engineering Controls", "General room ventilation is sufficient for normal use."],
+    ["Respiratory Protection", "Not required under normal use."],
+    ["Hand Protection", "Impermeable gloves if prolonged or repeated contact."],
+    ["Eye Protection", "Safety glasses recommended."],
+    ["Skin & Body Protection", "Standard work clothing; no special requirements."],
+    ["Hygiene Measures", "Wash hands before breaks and after work."],
+  ], 130);
+}
 
-  // ── PAGE 4: Sections 8 ──
-  ctx.addPage();
-  sectionKVTable(ctx, "SECTION 8 — Exposure Controls / Personal Protection", [
-    ["Engineering Controls", "General ventilation is sufficient."],
-    ["Eye Protection", "Safety glasses with side shields."],
-    ["Skin Protection", "Impervious gloves (nitrile recommended). Standard work clothing."],
-    ["Respiratory Protection", "Not required under normal use conditions."],
-    ["Hygiene Measures", "Wash hands after handling. No eating/drinking/smoking during use."],
-    ["Occupational Exposure Limits", "Not established for this mixture."],
-  ]);
-
-  // ── PAGE 5: Section 9 (Physical Properties table) ──
-  ctx.addPage();
-  sectionKVTable(ctx, "SECTION 9 — Physical and Chemical Properties", [
+function renderS9(ctx: Pg, s: SdsSettings) {
+  const pp = s.physical_properties;
+  sectionKV(ctx, "SECTION 9 — Physical and Chemical Properties", [
     ["Appearance", pp.appearance],
     ["Odor", pp.odor],
     ["Odor Threshold", pp.odor_threshold],
@@ -473,142 +322,255 @@ function generate_product_sds_pdf(product: ParsedProduct, settings: SdsSettings)
     ["Initial Boiling Point / BP Range", pp.boiling_point],
     ["Flash Point", pp.flash_point],
     ["Evaporation Rate", pp.evaporation_rate],
-    ["Flammability", pp.flammability],
-    ["Upper / Lower Explosion Limits", pp.explosion_limits],
+    ["Flammability (solid/gas)", pp.flammability],
+    ["Upper/Lower Explosion Limits", pp.explosion_limits],
     ["Vapor Pressure", pp.vapor_pressure],
     ["Vapor Density", pp.vapor_density],
-    ["Relative Density", pp.relative_density],
+    ["Relative Density (Specific Gravity)", pp.relative_density],
     ["Solubility", pp.solubility],
-    ["Partition Coefficient", pp.partition_coefficient],
+    ["Partition Coefficient (n-octanol/water)", pp.partition_coefficient],
     ["Autoignition Temperature", pp.autoignition_temperature],
     ["Decomposition Temperature", pp.decomposition_temperature],
     ["Viscosity", pp.viscosity],
   ]);
+}
 
-  // ── PAGE 6: Sections 10 + 11 + 12 + 13 ──
-  ctx.addPage();
-  renderSectionN(ctx, "SECTION 10 — Stability and Reactivity", [
-    "Reactivity: No dangerous reactions known under normal conditions.",
-    "Chemical Stability: Stable under normal ambient and storage conditions.",
-    "Hazardous Reactions: None under normal processing.",
-    "Conditions to Avoid: Extreme temperatures, freezing, direct sunlight.",
-    "Incompatible Materials: Strong oxidizers, strong acids, strong bases.",
-    "Hazardous Decomposition Products: None known. Thermal decomposition may produce carbon oxides.",
+function renderS10(ctx: Pg) {
+  sectionKV(ctx, "SECTION 10 — Stability and Reactivity", [
+    ["Reactivity", "No hazardous reactions known under normal conditions."],
+    ["Chemical Stability", "Stable under normal conditions of use and storage."],
+    ["Hazardous Reactions", "Hazardous polymerization will not occur."],
+    ["Conditions to Avoid", "Extreme heat, open flames, strong oxidizers."],
+    ["Incompatible Materials", "Strong oxidizing agents, concentrated alkaline solutions."],
+    ["Decomposition Products", "None under normal temperatures."],
   ]);
-  renderSectionN(ctx, "SECTION 11 — Toxicological Information", [
-    "Acute Toxicity: Not classified. No acute toxicity hazards under GHS.",
-    "Skin Corrosion/Irritation: May cause mild irritation on prolonged contact.",
-    "Eye Damage/Irritation: May cause mild transient irritation.",
-    "Sensitization: Not a respiratory or skin sensitizer.",
-    "Carcinogenicity: No component classified as carcinogenic (IARC, NTP, OSHA).",
-    "STOT/Reproductive/Aspiration: Not classified.",
-    "Note: Evaluated using GHS criteria. No significant toxicological hazards.",
-  ]);
-  renderSectionN(ctx, "SECTION 12 — Ecological Information", [
-    "Ecotoxicity: No significant environmental hazards under normal use.",
-    "Persistence & Degradability: Readily biodegradable surfactants (OECD criteria).",
-    "Bioaccumulation: Not expected to bioaccumulate significantly.",
-    "Mobility in Soil: Water-miscible. May be mobile in soil/aquatic environments.",
-  ]);
-  renderSectionN(ctx, "SECTION 13 — Disposal Considerations", [
-    "Waste Disposal: Dispose per local/regional/national regulations. Do not discharge to drains.",
-    "Contaminated Packaging: Rinse and dispose through licensed waste facilities.",
-    "RCRA (USA): Not classified as hazardous waste.",
-  ]);
+}
 
-  // ── PAGE 7: Sections 14 + 15 + 16 ──
-  ctx.addPage();
-  sectionKVTable(ctx, "SECTION 14 — Transport Information", [
+function renderS11(ctx: Pg) {
+  sectionKV(ctx, "SECTION 11 — Toxicological Information", [
+    ["Acute Toxicity", "Low toxicity; no lethal dose data available for normal use."],
+    ["Skin Corrosion/Irritation", "Mildly irritating to sensitive skin. No classification required."],
+    ["Eye Damage/Irritation", "May cause mild reversible eye irritation."],
+    ["Sensitization", "No skin sensitization expected."],
+    ["Germ Cell Mutagenicity", "No data indicating mutagenic potential."],
+    ["Carcinogenicity", "No ingredients listed as carcinogens by IARC, NTP, or OSHA."],
+    ["Reproductive Toxicity", "No known reproductive toxicity."],
+    ["STOT-SE (Single Exposure)", "No specific target organ toxicity expected."],
+    ["STOT-RE (Repeated Exposure)", "No effects expected from normal use."],
+    ["Aspiration Hazard", "Not applicable (aqueous solution)."],
+  ]);
+}
+
+function renderS12(ctx: Pg) {
+  sectionKV(ctx, "SECTION 12 — Ecological Information", [
+    ["Aquatic Toxicity", "Low aquatic toxicity expected based on component data."],
+    ["Persistence/Degradability", "Readily biodegradable. Surfactants meet OECD criteria."],
+    ["Bioaccumulative Potential", "Low bioaccumulation potential."],
+    ["Mobility in Soil", "High water solubility; low soil adsorption."],
+    ["Other Adverse Effects", "Do not release into environment. Safe for household drainage after dilution."],
+  ]);
+}
+
+function renderS13(ctx: Pg) {
+  secTitle(ctx, "SECTION 13 — Disposal Considerations");
+  bodyP(ctx, "• Dispose of contents/container in accordance with local, regional, national regulations.");
+  bodyP(ctx, "• Do not discharge into drains, soil, or waterways.");
+  bodyP(ctx, "• Empty containers: rinse thoroughly before recycling or disposal.");
+  bodyP(ctx, "• Do not pour into storm drains, rivers, or lakes.");
+}
+
+function renderS14(ctx: Pg, s: SdsSettings) {
+  const ti = s.transport_info;
+  sectionKV(ctx, "SECTION 14 — Transport Information", [
     ["UN Number", ti.un_number],
     ["UN Proper Shipping Name", ti.proper_shipping_name],
     ["Transport Hazard Class", ti.hazard_class],
     ["Packing Group", ti.packing_group],
     ["Environmental Hazard", ti.environmental_hazard],
     ["Special Precautions", ti.special_precautions],
-    ["DOT (USA)", "Not regulated as dangerous goods"],
-    ["IMDG (Marine)", "Not regulated"],
-    ["IATA (Air)", "Not regulated"],
   ]);
-  sectionKVTable(ctx, "SECTION 15 — Regulatory Information", [
+}
+
+function renderS15(ctx: Pg, s: SdsSettings) {
+  const ri = s.regulatory_info;
+  secTitle(ctx, "SECTION 15 — Regulatory Information");
+
+  const d = ctx.doc;
+  // International sub-title
+  d.setFillColor(...LBA); d.rect(M, ctx.y, CW, 14, "F");
+  d.setFontSize(7.5); d.setTextColor(...DB); d.setFont("helvetica", "bold");
+  d.text("International Regulations", M + 5, ctx.y + 9.5);
+  ctx.y += 16;
+
+  infoTable(ctx, [
     ["GHS Classification", ri.ghs_classification],
     ["US EPA", ri.us_epa],
     ["California Proposition 65", ri.california_prop65],
     ["TSCA (USA)", ri.tsca],
-    ["EU CLP / GHS", ri.eu_clp],
+    ["EU CLP/GHS", ri.eu_clp],
     ["Amazon Product Safety", ri.amazon_product_safety],
-  ]);
+  ], 120);
 
-  const sup = ki.supplier_name;
-  renderSectionN(ctx, "SECTION 16 — Other Information", [
-    `Prepared by: Quality & Safety Department, ${sup}`,
-    "",
-    "Revision: Version 1.0 — Initial issue",
-    "References: GHS Rev.9 / UN GHS 16th Edition (2026); OSHA 29 CFR 1910.1200;",
-    "EU CLP (EC) No. 1272/2008; Amazon SDS Compliance Guidelines.",
-    "",
-    "Disclaimer: This SDS is based on current knowledge and is intended to",
-    "describe the product for safety purposes only. It does not constitute a warranty.",
-  ]);
+  ctx.y += 2;
+  d.setFillColor(...LBA); d.rect(M, ctx.y, CW, 14, "F");
+  d.setFontSize(7.5); d.setTextColor(...DB); d.setFont("helvetica", "bold");
+  d.text("National Regulations", M + 5, ctx.y + 9.5);
+  ctx.y += 16;
+
+  bodyP(ctx, "China GB 30000 (2013): Not classified as hazardous. OSHA HazCom 2012: Compliant. EU CLP Regulation: Compliant.");
+}
+
+function renderS16(ctx: Pg, s: SdsSettings) {
+  const ki = s.kit_info;
+  secTitle(ctx, "SECTION 16 — Other Information");
+
+  infoTable(ctx, [
+    ["Preparation Date", ki.issue_date],
+    ["Version", `${ki.version} (2026 International SDS Standard)`],
+    ["Report Number", `${ki.report_number_prefix}-${ctx.bottle ? "LC" + ctx.bottle.replace("Bottle ", "") : "00"}-${ki.issue_date.replace(/-/g, "")}`],
+    ["Prepared by", `Quality & Safety Department, ${ki.supplier_name}`],
+    ["Key Literature Data", "Internal safety tests, supplier ingredient data, GHS 2026 guidelines."],
+  ], 100);
+
+  ctx.y += 4;
+  secTitle(ctx, "Legal Disclaimer");
+  bodyP(ctx, "This SDS is accurate to the best of our knowledge. Users must determine suitability for their specific use.");
+  bodyP(ctx, "This SDS complies with GHS/UN 16th Edition (2026) and applicable international and national regulations for Amazon marketplace listing.");
+}
+
+/* ════════════════════════════════════════════════════
+   PRODUCT SDS (7 pages)
+   ════════════════════════════════════════════════════ */
+
+function genProductSDS(product: ParsedProduct, s: SdsSettings, bottle?: string): jsPDF {
+  const ki = s.kit_info;
+  const doc = new jsPDF({ format: "letter", unit: "pt" });
+  const ctx = new Pg(doc, product.product_name, ki.version, ki.issue_date, ki.supplier_name, 7, bottle);
+
+  // PAGE 1: Cover + Section 1 + Section 2
+  let y = ctx.y + 25;
+  const d = doc;
+  d.setFontSize(18); d.setFont("helvetica", "bold"); d.setTextColor(...DB);
+  d.text("SAFETY DATA SHEET", W / 2, y, { align: "center" });
+  y += 14;
+  d.setFontSize(9); d.setFont("helvetica", "normal"); d.setTextColor(...GR);
+  d.text("According to GHS/UN 16th Edition (2026 International Standard)", W / 2, y, { align: "center" });
+  y += 10;
+
+  // Report bar
+  d.setFillColor(...LB); d.rect(M, y, CW, 22, "F");
+  d.setFontSize(7.5); d.setTextColor(...BK);
+  const rn = `${ki.report_number_prefix}-${bottle ? "LC" + bottle.replace("Bottle ", "") : product.section.replace(".", "")}-${ki.issue_date.replace(/-/g, "")}`;
+  d.text(`Report No.: ${rn}    |    Date: ${ki.issue_date}`, M + 10, y + 14);
+  y += 28;
+
+  // Bottle label
+  if (bottle) {
+    d.setFontSize(9); d.setFont("helvetica", "bold"); d.setTextColor(...DB);
+    d.text(`${bottle} / ${product.product_name}`, M, y);
+    y += 14;
+  }
+
+  ctx.y = y;
+  renderS1(ctx, product, s);
+
+  // Stamp image
+  if (ki.company_stamp_data_url) {
+    try {
+      const parts = ki.company_stamp_data_url.split(",");
+      if (parts.length === 2) {
+        const ix = W - M - 80; const iy = 95; const iw = 76; const ih = 38;
+        d.setFillColor(255, 255, 255); d.rect(ix - 2, iy - 2, iw + 4, ih + 4, "F");
+        d.setDrawColor(...BC); d.setLineWidth(0.3); d.rect(ix - 2, iy - 2, iw + 4, ih + 4, "S");
+        d.addImage(parts[1], "PNG", ix, iy, iw, ih);
+      }
+    } catch { /* ignore */ }
+  }
+
+  renderS2(ctx);
+
+  // PAGE 2: Sections 3 + 4
+  ctx.np();
+  renderS3(ctx, product);
+  renderS4(ctx);
+
+  // PAGE 3: Sections 5 + 6
+  ctx.np();
+  renderS5(ctx);
+  renderS6(ctx);
+
+  // PAGE 4: Sections 7 + 8
+  ctx.np();
+  renderS7(ctx);
+  renderS8(ctx);
+
+  // PAGE 5: Section 9
+  ctx.np();
+  renderS9(ctx, s);
+
+  // PAGE 6: Sections 10 + 11 + 12 + 13
+  ctx.np();
+  renderS10(ctx);
+  renderS11(ctx);
+  renderS12(ctx);
+  renderS13(ctx);
+
+  // PAGE 7: Sections 14 + 15 + 16
+  ctx.np();
+  renderS14(ctx, s);
+  renderS15(ctx, s);
+  renderS16(ctx, s);
 
   return doc;
 }
 
 /* ════════════════════════════════════════════════════
-   PACKAGE COVER PAGE
+   PACKAGE COVER
    ════════════════════════════════════════════════════ */
 
-function generate_package_cover(products: ParsedProduct[], settings: SdsSettings): jsPDF {
-  const ki = settings.kit_info;
+function genPackageCover(prods: ParsedProduct[], s: SdsSettings): jsPDF {
+  const ki = s.kit_info;
   const doc = new jsPDF({ format: "letter", unit: "pt" });
   const d = doc;
+  let y = BODY_T + 40;
 
-  let y = BODY_TOP + 40;
-
-  d.setFont("helvetica", "bold");
-  d.setFontSize(20);
-  d.setTextColor(...DARK_BLUE);
+  d.setFontSize(18); d.setFont("helvetica", "bold"); d.setTextColor(...DB);
   d.text("SAFETY DATA SHEET PACKAGE", W / 2, y, { align: "center" });
-  y += 20;
-  d.setDrawColor(...DARK_BLUE);
-  d.setLineWidth(0.5);
-  d.line(M + 20, y, W - M - 20, y);
   y += 16;
+  d.setFontSize(9); d.setFont("helvetica", "normal"); d.setTextColor(...GR);
+  d.text(`${ki.kit_name} — Three Liquid Components`, W / 2, y, { align: "center" });
+  y += 10;
+  d.setFontSize(7.5); d.setTextColor(...GR);
+  const rn = `${ki.report_number_prefix}-PACKAGE-${ki.issue_date.replace(/-/g, "")}`;
+  d.text(`Report No.: ${rn}    |    Date: ${ki.issue_date}`, M + 10, y + 6);
+  y += 24;
 
-  // Kit info
-  const ctx = new PageContext(doc, "Package Index", ki.version, ki.issue_date, ki.supplier_name, 1);
-  ctx.drawHeader();
-  ctx.drawFooter();
+  // KIT COMPONENT INDEX
+  d.setFillColor(...LBA); d.rect(M, y, CW, 16, "F");
+  d.setFontSize(9); d.setTextColor(...DB); d.setFont("helvetica", "bold");
+  d.text("KIT COMPONENT INDEX", M + 8, y + 11);
+  y += 20;
+
+  const ctx = new Pg(doc, "Package Index", ki.version, ki.issue_date, ki.supplier_name, 1);
   ctx.y = y;
 
-  infoTable(ctx, [
-    ["Kit Name", ki.kit_name],
-    ["ASIN", ki.asin],
-    ["Supplier Name", ki.supplier_name],
-    ["Issue Date", ki.issue_date],
-  ], 100);
-
-  ctx.y += 4;
-  sectionTitle(ctx, "Product List");
-  ctx.y += 2;
-
-  dataTable(ctx,
-    ["No.", "Product Name", "Report No.", "Ingredients Source"],
-    products.map((p, i) => [
-      String(i + 1),
+  const btls = ["Bottle 1", "Bottle 2", "Bottle 3"];
+  dataTable(ctx, ["Kit Component", "Product Name", "Report No."],
+    prods.map((p, i) => [
+      btls[i] || `Bottle ${i + 1}`,
       p.product_name,
-      `${ki.report_number_prefix}-${p.section.replace(".", "")}`,
-      "Word document",
+      `${ki.report_number_prefix}-LC${i + 1}-${ki.issue_date.replace(/-/g, "")}`,
     ]),
-    [30, 210, 140, 110]
+    [120, 270, 130]
   );
 
   ctx.y += 10;
-  d.setTextColor(...GRAY);
-  d.setFont("helvetica", "normal");
-  d.setFontSize(7);
-  d.text("This package contains individual SDS documents for each product listed above.", M, ctx.y);
-  ctx.y += 10;
-  d.text(`Total Products: ${products.length}    |    GHS/UN 16th Edition (2026)`, M, ctx.y);
+  sectionKV(ctx, "PACKAGE NOTE", [
+    ["Purpose", "This PDF package contains separate Safety Data Sheets for each liquid component in the same Golf Club Cleaning Kit. The three components have different formulations, so each liquid component is documented separately for Amazon SDS review."],
+    ["ASIN (Amazon)", ki.asin],
+    ["Supplier", ki.supplier_name],
+    ["Date", ki.issue_date],
+  ]);
 
   return doc;
 }
@@ -617,93 +579,61 @@ function generate_package_cover(products: ParsedProduct[], settings: SdsSettings
    VALIDATION
    ════════════════════════════════════════════════════ */
 
-const PLACEHOLDER_PATTERNS = [
-  /liquid\s*component\s*\d/i,
-  /to\s*be\s*confirmed/i,
-  /supplier\s*confirmation/i,
-  /\bTBC\b/i,
-];
+const PLACEHOLDER_PATTERNS = [/liquid\s*component\s*\d/i, /to\s*be\s*confirmed/i, /supplier\s*confirmation/i, /\bTBC\b/i];
 
-export interface ValidationResult {
-  valid: boolean;
-  errors: string[];
-}
+export interface ValidationResult { valid: boolean; errors: string[]; }
 
-export function validate_for_generation(
-  products: ParsedProduct[],
-  settings: SdsSettings
-): ValidationResult {
+export function validate_for_generation(prods: ParsedProduct[], s: SdsSettings): ValidationResult {
   const errors: string[] = [];
-  for (const p of products) {
+  for (const p of prods) {
     if (!p.product_name.trim()) errors.push(`${p.section}: Product name is empty`);
     if (p.ingredients.length === 0) errors.push(`${p.section}: No ingredients`);
-    if (Math.abs(p.percentage_total - 100) > 0.01)
-      errors.push(`${p.section}: Total is ${p.percentage_total}% (must be 100%)`);
-    for (const ing of p.ingredients) {
-      for (const pat of PLACEHOLDER_PATTERNS) {
-        if (pat.test(ing.chemical_composition))
-          errors.push(`${p.section}: "${ing.chemical_composition}" contains placeholder text`);
-      }
-    }
+    if (Math.abs(p.percentage_total - 100) > 0.01) errors.push(`${p.section}: Total is ${p.percentage_total}%`);
+    for (const ing of p.ingredients) for (const pat of PLACEHOLDER_PATTERNS) if (pat.test(ing.chemical_composition)) errors.push(`${p.section}: "${ing.chemical_composition}" has placeholder text`);
   }
-  if (!settings.kit_info.supplier_name.trim()) errors.push("Supplier Name is empty");
+  if (!s.kit_info.supplier_name.trim()) errors.push("Supplier Name is empty");
   return { valid: errors.length === 0, errors };
 }
 
 /* ════════════════════════════════════════════════════
-   OUTPUT: merge, ZIP, download
+   OUTPUT
    ════════════════════════════════════════════════════ */
 
-async function docToBytes(doc: jsPDF): Promise<Uint8Array> {
-  const blob = doc.output("blob");
-  const buf = await blob.arrayBuffer();
-  return new Uint8Array(buf);
+async function docBytes(doc: jsPDF): Promise<Uint8Array> {
+  const b = doc.output("blob"); const ab = await b.arrayBuffer(); return new Uint8Array(ab);
 }
 
-export async function generate_package_merged(
-  products: ParsedProduct[],
-  settings: SdsSettings
-): Promise<Blob> {
-  const cover = generate_package_cover(products, settings);
-  const coverBytes = await docToBytes(cover);
-  const pBytes = await Promise.all(
-    products.map((p) => generate_product_sds_pdf(p, settings)).map(docToBytes)
-  );
-  const merged = await PDFDocument.create();
-  for (const bytes of [coverBytes, ...pBytes]) {
+export async function generate_package_merged(prods: ParsedProduct[], s: SdsSettings): Promise<Blob> {
+  const btls = ["Bottle 1", "Bottle 2", "Bottle 3"];
+  const cov = genPackageCover(prods, s);
+  const covB = await docBytes(cov);
+  const pB = await Promise.all(prods.map((p, i) => genProductSDS(p, s, btls[i] || undefined)).map(docBytes));
+  const mg = await PDFDocument.create();
+  for (const bytes of [covB, ...pB]) {
     const src = await PDFDocument.load(bytes);
-    const pages = await merged.copyPages(src, src.getPageIndices());
-    for (const p of pages) merged.addPage(p);
+    const pgs = await mg.copyPages(src, src.getPageIndices());
+    for (const pg of pgs) mg.addPage(pg);
   }
-  const out = await merged.save();
+  const out = await mg.save();
   return new Blob([out as unknown as BlobPart], { type: "application/pdf" });
 }
 
-export async function generate_all_sds_outputs(
-  products: ParsedProduct[],
-  settings: SdsSettings
-): Promise<{
-  product_pdfs: { product_name: string; blob: Blob }[];
-  package_pdf_blob: Blob;
-  zip_blob: Blob;
-}> {
+export async function generate_all_sds_outputs(prods: ParsedProduct[], s: SdsSettings) {
   const zip = new JSZip();
-  const product_pdfs: { product_name: string; blob: Blob }[] = [];
+  const btls = ["Bottle 1", "Bottle 2", "Bottle 3"];
+  const pdfs: { product_name: string; blob: Blob }[] = [];
 
-  // Individual PDFs
-  for (const p of products) {
-    const doc = generate_product_sds_pdf(p, settings);
+  for (let i = 0; i < prods.length; i++) {
+    const doc = genProductSDS(prods[i], s, btls[i] || undefined);
     const blob = doc.output("blob");
-    const safe = p.product_name.replace(/[^a-zA-Z0-9_-]/g, "_");
-    product_pdfs.push({ product_name: safe, blob });
+    const safe = prods[i].product_name.replace(/[^a-zA-Z0-9_-]/g, "_");
+    pdfs.push({ product_name: safe, blob });
     zip.file(`${safe}_SDS.pdf`, blob);
   }
 
-  // Merged package PDF
-  const pkg = await generate_package_merged(products, settings);
-  const kName = settings.kit_info.kit_name.replace(/[^a-zA-Z0-9_-]/g, "_");
-  zip.file(`${kName}_SDS_Package.pdf`, pkg);
+  const pkg = await generate_package_merged(prods, s);
+  const kn = s.kit_info.kit_name.replace(/[^a-zA-Z0-9_-]/g, "_");
+  zip.file(`${kn}_SDS_Package.pdf`, pkg);
 
-  const zipBlob = await zip.generateAsync({ type: "blob" });
-  return { product_pdfs, package_pdf_blob: pkg, zip_blob: zipBlob };
+  return { product_pdfs: pdfs, package_pdf_blob: pkg, zip_blob: await zip.generateAsync({ type: "blob" }) };
 }
