@@ -40,8 +40,8 @@ class Pg {
   pName: string; ver: string; date: string; sup: string;
   bottle: string; // "Bottle 1" etc for subtitle
 
-  constructor(doc: jsPDF, nm: string, ver: string, date: string, sup: string, total: number, bottle?: string) {
-    this.doc = doc; this.page = 1; this.total = total;
+  constructor(doc: jsPDF, nm: string, ver: string, date: string, sup: string, bottle?: string) {
+    this.doc = doc; this.page = 1; this.total = 5; // placeholder, fixed later
     this.pName = nm; this.ver = ver; this.date = date; this.sup = sup;
     this.y = BODY_T; this.bottle = bottle || "";
     this.header(); this.footer();
@@ -80,6 +80,32 @@ class Pg {
   np() { this.page++; this.doc.addPage(); this.y = BODY_T; this.header(); this.footer(); }
   ns(h: number): boolean { return this.y + h > H - BODY_B; }
   es(h: number) { if (this.ns(h)) this.np(); }
+
+  /** After all content is drawn, fix up footer page numbers */
+  fixupFooters() {
+    const total = this.doc.getNumberOfPages();
+    this.total = total;
+    const d = this.doc;
+    const sup = `${this.sup}${this.bottle ? ", P.R. China" : ""}`;
+    for (let p = 1; p <= total; p++) {
+      d.setPage(p);
+      // Erase old footer
+      d.setFillColor(255, 255, 255);
+      d.rect(0, H - FOOT_H, W, FOOT_H, "F");
+      // Redraw footer line + text
+      const fy = H - FOOT_H + 2;
+      d.setDrawColor(...LB); d.setLineWidth(1);
+      d.line(M, fy, W - M, fy);
+      d.setTextColor(...GR); d.setFontSize(6.5);
+      d.setFont("helvetica", "normal");
+      d.text(`Version ${this.ver}  |  Date: ${this.date}  |  Page ${p} of ${total}  |  Supplier: ${sup}`, W / 2, fy + 10, { align: "center" });
+      // Update page counter in header too
+      d.setFillColor(...DB);
+      d.rect(W - M - 80, 10, 80, 26, "F");
+      d.setTextColor(255, 255, 255); d.setFontSize(7);
+      d.text(`Page ${p} of ${total}`, W - M, 23, { align: "right" });
+    }
+  }
 }
 
 /* ════════════════════════════════════════════════════
@@ -320,7 +346,20 @@ function renderS3(ctx: Pg, product: ParsedProduct) {
     ing.cas_number || "N/A",
     ing.percentage !== null ? `${ing.percentage}%` : (ing.percentage_raw || "—"),
   ]);
-  dataTable(ctx, ["#", "Ingredient", "CAS No.", "Percentage"], rows, [24, 240, 110, 70]);
+  dataTable(ctx, ["#", "Ingredient", "CAS No.", "Percentage"], rows, [24, 240, 110, 70], false);
+
+  // Total row – bold, light-blue background
+  ctx.y += 1;
+  const totalRowH = 13;
+  d.setFillColor(...LB);
+  d.rect(M, ctx.y, CW, totalRowH, "F");
+  d.setDrawColor(...BC); d.setLineWidth(0.3);
+  d.rect(M, ctx.y, CW, totalRowH, "S");
+  d.setFontSize(7); d.setFont("helvetica", "bold");
+  d.setTextColor(...DB);
+  d.text("Total", M + 180, ctx.y + 9, { align: "right" });
+  d.text(`${product.percentage_total}%`, M + 300, ctx.y + 9);
+  ctx.y += totalRowH + 2;
 
   // Mixture Description
   ctx.y += 2;
@@ -515,79 +554,76 @@ function renderS16(ctx: Pg, s: SdsSettings) {
 function genProductSDS(product: ParsedProduct, s: SdsSettings, stampDataUrl: string, bottle?: string): jsPDF {
   const ki = s.kit_info;
   const doc = new jsPDF({ format: "letter", unit: "pt" });
-  const ctx = new Pg(doc, product.product_name, ki.version, ki.issue_date, ki.supplier_name, 7, bottle);
+  const ctx = new Pg(doc, product.product_name, ki.version, ki.issue_date, ki.supplier_name, bottle);
 
-  // PAGE 1: Cover + Section 1 + Section 2
-  let y = ctx.y + 25;
+  // PAGE 1: Cover + Section 1 + Section 2 + stamp
+  let y = ctx.y + 20;
   const d = doc;
   d.setFontSize(18); d.setFont("helvetica", "bold"); d.setTextColor(...DB);
   d.text("SAFETY DATA SHEET", W / 2, y, { align: "center" });
-  y += 14;
-  d.setFontSize(9); d.setFont("helvetica", "normal"); d.setTextColor(...GR);
+  y += 12;
+  d.setFontSize(8.5); d.setFont("helvetica", "normal"); d.setTextColor(...GR);
   d.text("According to GHS/UN 16th Edition (2026 International Standard)", W / 2, y, { align: "center" });
-  y += 10;
+  y += 8;
 
   // Report bar
-  d.setFillColor(...LB); d.rect(M, y, CW, 22, "F");
+  d.setFillColor(...LB); d.rect(M, y, CW, 20, "F");
   d.setFontSize(7.5); d.setTextColor(...BK);
   const rn = `${ki.report_number_prefix}-${bottle ? "LC" + bottle.replace("Bottle ", "") : product.section.replace(".", "")}-${ki.issue_date.replace(/-/g, "")}`;
-  d.text(`Report No.: ${rn}    |    Date: ${ki.issue_date}`, M + 10, y + 14);
-  y += 28;
+  d.text(`Report No.: ${rn}    |    Date: ${ki.issue_date}`, M + 8, y + 13);
+  y += 26;
 
   // Bottle label
   if (bottle) {
     d.setFontSize(9); d.setFont("helvetica", "bold"); d.setTextColor(...DB);
     d.text(`${bottle} / ${product.product_name}`, M, y);
-    y += 14;
+    y += 12;
   }
 
   ctx.y = y;
   renderS1(ctx, product, s);
-
-  // Stamp image – floating overlay on page 1 only, top-right area
-  if (stampDataUrl) {
-    try {
-      const parts = stampDataUrl.split(",");
-      if (parts.length === 2) {
-        const sx = 495, sy = 58, sw = 80, sh = 42;
-        d.addImage(parts[1], "PNG", sx, sy, sw, sh);
-      }
-    } catch { /* ignore */ }
-  }
-
   renderS2(ctx);
 
-  // PAGE 2: Sections 3 + 4
+  // ── PAGE 2: Sections 3 + 4 + 5 + 6 ──
   ctx.np();
   renderS3(ctx, product);
   renderS4(ctx);
-
-  // PAGE 3: Sections 5 + 6
-  ctx.np();
   renderS5(ctx);
   renderS6(ctx);
 
-  // PAGE 4: Sections 7 + 8
+  // ── PAGE 3: Sections 7 + 8 + 9 ──
   ctx.np();
   renderS7(ctx);
   renderS8(ctx);
-
-  // PAGE 5: Section 9
-  ctx.np();
   renderS9(ctx, s);
 
-  // PAGE 6: Sections 10 + 11 + 12 + 13
+  // ── PAGE 4: Sections 10 + 11 + 12 + 13 ──
   ctx.np();
   renderS10(ctx);
   renderS11(ctx);
   renderS12(ctx);
   renderS13(ctx);
 
-  // PAGE 7: Sections 14 + 15 + 16
+  // ── PAGE 5: Sections 14 + 15 + 16 ──
   ctx.np();
   renderS14(ctx, s);
   renderS15(ctx, s);
   renderS16(ctx, s);
+
+  // Stamp – floating overlay on page 1 only, near bottom-right
+  if (stampDataUrl) {
+    try {
+      d.setPage(1);
+      const parts = stampDataUrl.split(",");
+      if (parts.length === 2) {
+        const sx = 475, sy = 680, sw = 90, sh = 48;
+        d.addImage(parts[1], "PNG", sx, sy, sw, sh);
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Fix up footers with actual page count
+  ctx.fixupFooters();
 
   return doc;
 }
@@ -619,7 +655,7 @@ function genPackageCover(prods: ParsedProduct[], s: SdsSettings): jsPDF {
   d.text("KIT COMPONENT INDEX", M + 8, y + 11);
   y += 20;
 
-  const ctx = new Pg(doc, "Package Index", ki.version, ki.issue_date, ki.supplier_name, 1);
+  const ctx = new Pg(doc, "Package Index", ki.version, ki.issue_date, ki.supplier_name);
   ctx.y = y;
 
   const btls = ["Bottle 1", "Bottle 2", "Bottle 3"];
@@ -632,13 +668,21 @@ function genPackageCover(prods: ParsedProduct[], s: SdsSettings): jsPDF {
     [120, 270, 130]
   );
 
-  ctx.y += 10;
+  ctx.y += 6;
   sectionKV(ctx, "PACKAGE NOTE", [
     ["Purpose", "This PDF package contains separate Safety Data Sheets for each liquid component in the same Golf Club Cleaning Kit. The three components have different formulations, so each liquid component is documented separately for Amazon SDS review."],
     ["ASIN (Amazon)", ki.asin],
     ["Supplier", ki.supplier_name],
     ["Date", ki.issue_date],
   ]);
+
+  ctx.y += 4;
+  secTitle(ctx, "Supplier Declaration");
+  d.setTextColor(...BK); d.setFontSize(7); d.setFont("helvetica", "normal");
+  d.text(`The supplier ${ki.supplier_name} certifies that the information provided in these Safety Data Sheets is accurate to the best of knowledge and complies with applicable regulations for Amazon marketplace.`, M + 5, ctx.y + 7);
+  ctx.y += 14;
+
+  ctx.fixupFooters();
 
   return doc;
 }
