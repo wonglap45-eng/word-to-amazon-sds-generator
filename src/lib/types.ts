@@ -56,18 +56,124 @@ export interface ParsedSdsData {
   parsed_at: string;
 }
 
-/* ───────── SDS Settings (Phase 3) ───────── */
+/* ───────── SDS Settings ───────── */
 
+/** Kit / supplier information for the SDS header */
+export interface SdsKitInfo {
+  kit_name: string;
+  asin: string;
+  supplier_name: string;
+  address: string;
+  telephone: string;
+  email: string;
+  emergency_telephone: string;
+  issue_date: string;
+  version: string;
+  report_number_prefix: string;
+  /** Base64 data URL of the company stamp / signature image */
+  company_stamp_data_url: string;
+}
+
+/** Physical & chemical properties section (Section 9) */
+export interface SdsPhysicalProperties {
+  appearance: string;
+  odor: string;
+  odor_threshold: string;
+  ph: string;
+  melting_point: string;
+  boiling_point: string;
+  flash_point: string;
+  evaporation_rate: string;
+  flammability: string;
+  explosion_limits: string;
+  vapor_pressure: string;
+  vapor_density: string;
+  relative_density: string;
+  solubility: string;
+  partition_coefficient: string;
+  autoignition_temperature: string;
+  decomposition_temperature: string;
+  viscosity: string;
+}
+
+/** Transport information section (Section 14) */
+export interface SdsTransportInfo {
+  un_number: string;
+  proper_shipping_name: string;
+  hazard_class: string;
+  packing_group: string;
+  environmental_hazard: string;
+  special_precautions: string;
+}
+
+/** Regulatory information section (Section 15) */
+export interface SdsRegulatoryInfo {
+  ghs_classification: string;
+  us_epa: string;
+  california_prop65: string;
+  tsca: string;
+  eu_clp: string;
+  amazon_product_safety: string;
+}
+
+/** Complete SDS settings used for PDF generation */
 export interface SdsSettings {
-  language: "en" | "zh";
-  include_toc: boolean;
-  output_format: "pdf" | "zip";
+  kit_info: SdsKitInfo;
+  physical_properties: SdsPhysicalProperties;
+  transport_info: SdsTransportInfo;
+  regulatory_info: SdsRegulatoryInfo;
 }
 
 export const DEFAULT_SDS_SETTINGS: SdsSettings = {
-  language: "en",
-  include_toc: true,
-  output_format: "pdf",
+  kit_info: {
+    kit_name: "Golf Club Cleaning Kit",
+    asin: "B0GDFYB87T",
+    supplier_name: "TEHCIN",
+    address: "",
+    telephone: "",
+    email: "",
+    emergency_telephone: "",
+    issue_date: new Date().toISOString().split("T")[0],
+    version: "1.0",
+    report_number_prefix: "SDS-GCCK",
+    company_stamp_data_url: "",
+  },
+  physical_properties: {
+    appearance: "Transparent liquid",
+    odor: "Non-irritating, neutral odor",
+    odor_threshold: "Not determined",
+    ph: "5.5",
+    melting_point: "~0°C",
+    boiling_point: "~100°C",
+    flash_point: "Non-flammable (no flash point)",
+    evaporation_rate: "Similar to water",
+    flammability: "Non-flammable",
+    explosion_limits: "Not applicable",
+    vapor_pressure: "Similar to water",
+    vapor_density: "Not determined",
+    relative_density: "~1.0 g/cm³",
+    solubility: "Miscible with water",
+    partition_coefficient: "Not determined",
+    autoignition_temperature: "Not applicable",
+    decomposition_temperature: "Not applicable",
+    viscosity: "Aqueous solution; similar to water",
+  },
+  transport_info: {
+    un_number: "Not regulated for transport (UN3077 does not apply)",
+    proper_shipping_name: "Not dangerous goods",
+    hazard_class: "None",
+    packing_group: "Not applicable",
+    environmental_hazard: "No (not a marine pollutant)",
+    special_precautions: "No special transport precautions required.",
+  },
+  regulatory_info: {
+    ghs_classification: "Not classified as hazardous",
+    us_epa: "Complies with Safer Choice criteria (surfactants)",
+    california_prop65: "No listed chemicals present",
+    tsca: "All components are listed",
+    eu_clp: "Not classified as hazardous",
+    amazon_product_safety: "Complies with Amazon chemical product requirements",
+  },
 };
 
 /* ───────── SDS Result (Phase 4) ───────── */

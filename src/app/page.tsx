@@ -14,13 +14,16 @@ import { Separator } from "@/components/ui/separator";
 import { StepIndicator } from "@/components/step-indicator";
 import { FileUpload } from "@/components/file-upload";
 import { ParsedDataEditor, all_products_valid } from "@/components/parsed-data-editor";
+import { SdsSettingsForm } from "@/components/sds-settings-form";
 import { parse_docx } from "@/lib/parse-docx";
 import type {
   WizardStep,
   UploadedFile,
   UploadStatus,
   ParsedSdsData,
+  SdsSettings,
 } from "@/lib/types";
+import { DEFAULT_SDS_SETTINGS } from "@/lib/types";
 
 /* ───── Step metadata ───── */
 const STEP_META = [
@@ -105,6 +108,7 @@ export default function Home() {
   const [parse_status, set_parse_status] = useState<ParseStatus>("idle");
   const [parsed_data, set_parsed_data] = useState<ParsedSdsData | null>(null);
   const [parse_error, set_parse_error] = useState<string>("");
+  const [sds_settings, set_sds_settings] = useState<SdsSettings>(DEFAULT_SDS_SETTINGS);
 
   /* ── Handlers ── */
 
@@ -169,6 +173,11 @@ export default function Home() {
   /* ── Editable data change handler ── */
   const handle_data_change = useCallback((data: ParsedSdsData) => {
     set_parsed_data(data);
+  }, []);
+
+  /* ── Settings change handler ── */
+  const handle_settings_change = useCallback((settings: SdsSettings) => {
+    set_sds_settings(settings);
   }, []);
 
   /* ── Validation on Step 2 ── */
@@ -351,8 +360,16 @@ export default function Home() {
               </div>
             )}
 
-            {/* ── Steps 3 & 4: Placeholder ── */}
-            {(active_step === 3 || active_step === 4) && (
+            {/* ── Step 3: SDS Settings ── */}
+            {active_step === 3 && (
+              <SdsSettingsForm
+                settings={sds_settings}
+                on_settings_change={handle_settings_change}
+              />
+            )}
+
+            {/* ── Step 4: Generate PDF (placeholder) ── */}
+            {active_step === 4 && (
               <StepPlaceholder step={active_step} />
             )}
           </CardContent>
