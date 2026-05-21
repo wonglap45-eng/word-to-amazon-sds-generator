@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { StepIndicator } from "@/components/step-indicator";
 import { FileUpload } from "@/components/file-upload";
-import { ParsedDataTable } from "@/components/parsed-data-table";
+import { ParsedDataEditor, all_products_valid } from "@/components/parsed-data-editor";
 import { parse_docx } from "@/lib/parse-docx";
 import type {
   WizardStep,
@@ -166,11 +166,22 @@ export default function Home() {
     }
   };
 
+  /* ── Editable data change handler ── */
+  const handle_data_change = useCallback((data: ParsedSdsData) => {
+    set_parsed_data(data);
+  }, []);
+
+  /* ── Validation on Step 2 ── */
+  const step2_valid = parsed_data
+    ? all_products_valid(parsed_data.products)
+    : false;
+
   /* ── Determine if Next is enabled for current step ── */
   const next_disabled = (() => {
     if (active_step === 1 && !uploaded_file) return true;
     if (active_step === 1 && parse_status === "parsing") return true;
     if (active_step === 2 && parse_status !== "done") return true;
+    if (active_step === 2 && !step2_valid) return true;
     if (active_step === 4) return true;
     return false;
   })();
@@ -303,11 +314,40 @@ export default function Home() {
             {active_step === 2 && parse_status === "done" && parsed_data && (
               <div>
                 <p className="text-sm text-muted-foreground mb-6">
-                  Review the extracted product and ingredient data below. If
-                  anything looks incorrect, go back to Step 1 and upload a
-                  corrected document.
+                  Review and edit the extracted product data below. All fields
+                  are editable. Fix any errors before proceeding.
                 </p>
-                <ParsedDataTable data={parsed_data} />
+                <ParsedDataEditor
+                  data={parsed_data}
+                  on_data_change={handle_data_change}
+                />
+                {!step2_valid && (
+                  <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
+                    <p className="font-medium mb-1">
+                      ⚠️ Validation errors — fix before proceeding:
+                    </p>
+                    <ul className="list-disc list-inside space-y-0.5">
+                      {parsed_data.products.map((p, i) => {
+                        const name_missing = !p.product_name.trim();
+                        const no_ings = p.ingredients.length === 0;
+                        const total_bad =
+                          Math.abs(p.percentage_total - 100) > 0.01;
+                        const errors: string[] = [];
+                        if (name_missing) errors.push("Product name is empty");
+                        if (no_ings) errors.push("No ingredients");
+                        if (total_bad)
+                          errors.push(
+                            `Total is ${p.percentage_total}% (must be 100%)`
+                          );
+                        return errors.length > 0 ? (
+                          <li key={i}>
+                            <strong>{p.section}</strong>: {errors.join("; ")}
+                          </li>
+                        ) : null;
+                      })}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
 
