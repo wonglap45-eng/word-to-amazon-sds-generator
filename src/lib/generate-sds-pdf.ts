@@ -74,7 +74,7 @@ class Pg {
     d.line(M, y, W - M, y);
     d.setTextColor(...GR); d.setFontSize(6.5);
     d.setFont("helvetica", "normal");
-    d.text(`Version ${this.ver}  |  Date: ${this.date}  |  Page ${this.page} of ${this.total}  |  Supplier: ${this.sup}${this.bottle ? `, P.R. China` : ""}`, W / 2, y + 10, { align: "center" });
+    d.text(`Version ${this.ver}  |  Date: ${this.date}  |  Page ${this.page} of ${this.total}  |  Supplier: ${this.sup}`, W / 2, y + 10, { align: "center" });
   }
 
   np() { this.page++; this.doc.addPage(); this.y = BODY_T; this.header(); this.footer(); }
@@ -86,12 +86,12 @@ class Pg {
     const total = this.doc.getNumberOfPages();
     this.total = total;
     const d = this.doc;
-    const sup = `${this.sup}${this.bottle ? ", P.R. China" : ""}`;
+    const sup = this.sup;
     for (let p = 1; p <= total; p++) {
       d.setPage(p);
       // Erase old footer
       d.setFillColor(255, 255, 255);
-      d.rect(0, H - FOOT_H, W, FOOT_H, "F");
+      d.rect(0, H - FOOT_H - 5, W, FOOT_H + 10, "F");
       // Redraw footer line + text
       const fy = H - FOOT_H + 2;
       d.setDrawColor(...LB); d.setLineWidth(1);
@@ -114,14 +114,14 @@ class Pg {
 
 const PAD = 3; const MAX_PAGE_SIZE = 3 * 1024 * 1024;
 
-function secTitle(ctx: Pg, text: string, h = 16) {
-  ctx.es(h + 6);
+function secTitle(ctx: Pg, text: string, h = 14) {
+  ctx.es(h + 3);
   const d = ctx.doc;
   d.setFillColor(...DB); d.rect(M, ctx.y, CW, h, "F");
-  d.setTextColor(255, 255, 255); d.setFontSize(8.5);
+  d.setTextColor(255, 255, 255); d.setFontSize(8);
   d.setFont("helvetica", "bold");
-  d.text(text, M + PAD + 2, ctx.y + h - 4.5);
-  ctx.y += h + 6;
+  d.text(text, M + PAD + 2, ctx.y + h - 4);
+  ctx.y += h + 3;
 }
 
 /**
@@ -257,7 +257,7 @@ async function preprocessStamp(dataUrl: string): Promise<string> {
 
 function renderS1(ctx: Pg, product: ParsedProduct, s: SdsSettings) {
   const ki = s.kit_info;
-  const addr = ki.address || "No.37 Zhengzhuang Village, Xieqiao Town, Yingshang County, Fuyang City, Anhui Province, 236000, P.R. China";
+  const addr = ki.address || "No.37 Zhengzhuang Village, Xieqiao Town, Yingshang County, Fuyang City, Anhui Province, 236000";
   const tel = ki.telephone || "+86 13178739270";
   const em = ki.email || "songping3544@outlook.com";
 
@@ -616,7 +616,7 @@ function genProductSDS(product: ParsedProduct, s: SdsSettings, stampDataUrl: str
       d.setPage(1);
       const parts = stampDataUrl.split(",");
       if (parts.length === 2) {
-        const sx = 475, sy = 680, sw = 90, sh = 48;
+        const sx = 465, sy = 675, sw = 100, sh = 52;
         d.addImage(parts[1], "PNG", sx, sy, sw, sh);
       }
     } catch { /* ignore */ }
@@ -669,8 +669,27 @@ function genPackageCover(prods: ParsedProduct[], s: SdsSettings): jsPDF {
   );
 
   ctx.y += 6;
+
+  // Document Purpose
+  secTitle(ctx, "Document Purpose");
+  d.setTextColor(...BK); d.setFontSize(7); d.setFont("helvetica", "normal");
+  d.text("This Safety Data Sheet Package is prepared to meet Amazon marketplace requirements for chemical product documentation. It provides comprehensive safety information for each liquid component in the Golf Club Cleaning Kit.", M + PAD + 2, ctx.y + 7);
+  ctx.y += 14;
+
+  // Kit Components Statement
+  secTitle(ctx, "Kit Components Statement");
+  d.setTextColor(...BK); d.setFontSize(7);
+  d.text(`The Golf Club Cleaning Kit (ASIN: ${ki.asin}) contains three independently formulated liquid components. Each component has been documented with its own Safety Data Sheet containing 16 standardized sections per GHS/UN 16th Edition (2026).`, M + PAD + 2, ctx.y + 7);
+  ctx.y += 14;
+
+  // Amazon SDS Review Note
+  secTitle(ctx, "Amazon SDS Review Note");
+  d.setTextColor(...BK); d.setFontSize(7);
+  d.text("These SDS documents have been formatted to comply with Amazon's Safety Data Sheet requirements for chemical products sold on Amazon.com. All ingredients are disclosed with CAS numbers and percentage composition. Hazard classification follows GHS UN 16th Edition criteria.", M + PAD + 2, ctx.y + 7);
+  ctx.y += 14;
+
   sectionKV(ctx, "PACKAGE NOTE", [
-    ["Purpose", "This PDF package contains separate Safety Data Sheets for each liquid component in the same Golf Club Cleaning Kit. The three components have different formulations, so each liquid component is documented separately for Amazon SDS review."],
+    ["Purpose", "This PDF package contains separate Safety Data Sheets for each liquid component. The three components have different formulations and are documented separately for Amazon SDS review."],
     ["ASIN (Amazon)", ki.asin],
     ["Supplier", ki.supplier_name],
     ["Date", ki.issue_date],
@@ -679,7 +698,7 @@ function genPackageCover(prods: ParsedProduct[], s: SdsSettings): jsPDF {
   ctx.y += 4;
   secTitle(ctx, "Supplier Declaration");
   d.setTextColor(...BK); d.setFontSize(7); d.setFont("helvetica", "normal");
-  d.text(`The supplier ${ki.supplier_name} certifies that the information provided in these Safety Data Sheets is accurate to the best of knowledge and complies with applicable regulations for Amazon marketplace.`, M + 5, ctx.y + 7);
+  d.text(`The supplier ${ki.supplier_name} certifies that the information provided in these Safety Data Sheets is accurate to the best of knowledge and complies with applicable regulations for Amazon marketplace.`, M + PAD + 2, ctx.y + 7);
   ctx.y += 14;
 
   ctx.fixupFooters();
