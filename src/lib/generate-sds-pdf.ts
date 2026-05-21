@@ -86,64 +86,106 @@ class Pg {
    DRAWING HELPERS
    ════════════════════════════════════════════════════ */
 
+const PAD = 3; const MAX_PAGE_SIZE = 3 * 1024 * 1024;
+
 function secTitle(ctx: Pg, text: string, h = 16) {
   ctx.es(h + 6);
   const d = ctx.doc;
   d.setFillColor(...DB); d.rect(M, ctx.y, CW, h, "F");
   d.setTextColor(255, 255, 255); d.setFontSize(8.5);
   d.setFont("helvetica", "bold");
-  d.text(text, M + 5, ctx.y + h - 4.5);
+  d.text(text, M + PAD + 2, ctx.y + h - 4.5);
   ctx.y += h + 6;
 }
 
-function infoTable(ctx: Pg, rows: [string, string][], lw = 120) {
-  const d = ctx.doc; const rh = 13;
-  ctx.es(rh * rows.length + 4);
+/**
+ * Wrapped info table – label + value with auto text wrapping.
+ * Each row's height is calculated from the taller column's line count.
+ */
+function infoTable(ctx: Pg, rows: [string, string][], lw = 120, fs = 6.8, lh = 8) {
+  const d = ctx.doc;
+  const vw = CW - lw;
+
   for (const [k, v] of rows) {
-    d.setFillColor(...LB); d.rect(M, ctx.y, lw, rh, "F");
-    d.setDrawColor(...BC); d.setLineWidth(0.3);
-    d.rect(M, ctx.y, lw, rh, "S");
-    d.rect(M + lw, ctx.y, CW - lw, rh, "S");
-    if (v) d.rect(M + lw, ctx.y, CW - lw, rh, "F");
-    d.setFillColor(255, 255, 255);
-    d.rect(M + lw, ctx.y, CW - lw, rh, "F");
-    d.setDrawColor(...BC);
-    d.rect(M + lw, ctx.y, CW - lw, rh, "S");
-    d.setFontSize(7); d.setTextColor(...BK);
-    d.setFont("helvetica", "bold"); d.text(k, M + 4, ctx.y + 8.5);
-    d.setFont("helvetica", "normal"); d.text(v || "—", M + lw + 4, ctx.y + 8.5);
-    ctx.y += rh;
+    const kLines = d.splitTextToSize(k, lw - PAD * 2);
+    const vLines = d.splitTextToSize(v || "—", vw - PAD * 2);
+    const nLines = Math.max(kLines.length, vLines.length, 1);
+    const rowH = nLines * lh + PAD * 2;
+
+    ctx.es(rowH);
+    const ry = ctx.y;
+
+    // Label cell
+    d.setFillColor(...LB); d.rect(M, ry, lw, rowH, "F");
+    d.setDrawColor(...BC); d.setLineWidth(0.3); d.rect(M, ry, lw, rowH, "S");
+    d.setTextColor(...BK); d.setFontSize(fs);
+    d.setFont("helvetica", "bold");
+    let ky = ry + PAD + lh * 0.7;
+    for (const line of kLines) { d.text(line, M + PAD, ky); ky += lh; }
+
+    // Value cell
+    d.setFillColor(255, 255, 255); d.rect(M + lw, ry, vw, rowH, "F");
+    d.setDrawColor(...BC); d.rect(M + lw, ry, vw, rowH, "S");
+    d.setFont("helvetica", "normal");
+    ky = ry + PAD + lh * 0.7;
+    for (const line of vLines) { d.text(line, M + lw + PAD, ky); ky += lh; }
+
+    ctx.y += rowH;
   }
   ctx.y += 4;
 }
 
-function dataTable(ctx: Pg, hd: string[], rows: string[][], cw: number[], hf?: boolean) {
-  const d = ctx.doc; const rh = 13;
-  ctx.es(rh * (rows.length + 1) + 6);
-  // Header
+/**
+ * Wrapped data table – multi-column with auto text wrapping.
+ */
+function dataTable(ctx: Pg, hd: string[], rows: string[][], cw: number[], hf?: boolean, fs = 6.5, lh = 8) {
+  const d = ctx.doc;
+  // Calculate header height
+  let hdrLines = 1;
+  for (let c = 0; c < hd.length; c++) {
+    const n = d.splitTextToSize(hd[c], cw[c] - PAD * 2).length;
+    if (n > hdrLines) hdrLines = n;
+  }
+  const hdrH = hdrLines * lh + PAD * 2;
+  ctx.es(hdrH);
+
+  // Draw header
   let x = M;
   for (let c = 0; c < hd.length; c++) {
-    d.setFillColor(...LB); d.rect(x, ctx.y, cw[c], rh, "F");
-    d.setDrawColor(...BC); d.setLineWidth(0.3); d.rect(x, ctx.y, cw[c], rh, "S");
-    d.setFontSize(7); d.setTextColor(...BK); d.setFont("helvetica", "bold");
-    d.text(hd[c], x + 3, ctx.y + 8.5);
+    d.setFillColor(...LB); d.rect(x, ctx.y, cw[c], hdrH, "F");
+    d.setDrawColor(...BC); d.setLineWidth(0.3); d.rect(x, ctx.y, cw[c], hdrH, "S");
+    d.setTextColor(...BK); d.setFontSize(fs); d.setFont("helvetica", "bold");
+    let hy = ctx.y + PAD + lh * 0.7;
+    for (const l of d.splitTextToSize(hd[c], cw[c] - PAD * 2)) { d.text(l, x + PAD, hy); hy += lh; }
     x += cw[c];
   }
-  ctx.y += rh;
-  // Rows
+  ctx.y += hdrH;
+
+  // Data rows
   for (let r = 0; r < rows.length; r++) {
+    // Calculate max lines for this row
+    let maxLines = 1;
+    for (let c = 0; c < rows[r].length; c++) {
+      const n = d.splitTextToSize(rows[r][c], cw[c] - PAD * 2).length;
+      if (n > maxLines) maxLines = n;
+    }
+    const rowH = maxLines * lh + PAD * 2;
+    ctx.es(rowH);
+
     x = M; const isLast = hf && r === rows.length - 1;
     for (let c = 0; c < rows[r].length; c++) {
       d.setFillColor(isLast ? LB[0] : WH[0], isLast ? LB[1] : WH[1], isLast ? LB[2] : WH[2]);
-      d.rect(x, ctx.y, cw[c], rh, "F");
-      d.setDrawColor(...BC); d.setLineWidth(0.3); d.rect(x, ctx.y, cw[c], rh, "S");
-      d.setFontSize(6.5);
+      d.rect(x, ctx.y, cw[c], rowH, "F");
+      d.setDrawColor(...BC); d.setLineWidth(0.3); d.rect(x, ctx.y, cw[c], rowH, "S");
       d.setTextColor(isLast ? DB[0] : BK[0], isLast ? DB[1] : BK[1], isLast ? DB[2] : BK[2]);
-      d.setFont("helvetica", isLast ? "bold" : "normal");
-      d.text(rows[r][c], x + 3, ctx.y + 8.5);
+      d.setFontSize(fs); d.setFont("helvetica", isLast ? "bold" : "normal");
+      let ry = ctx.y + PAD + lh * 0.7;
+      for (const l of d.splitTextToSize(rows[r][c], cw[c] - PAD * 2)) {
+        d.text(l, x + PAD, ry); ry += lh;
+      }
       x += cw[c];
     }
-    ctx.y += rh;
+    ctx.y += rowH;
   }
   ctx.y += 5;
 }
@@ -154,7 +196,34 @@ function bodyP(ctx: Pg, text: string, fs = 7) {
   for (const l of ls) { ctx.es(fs + 4); d.text(l, M + 2, ctx.y + fs); ctx.y += fs + 3; }
 }
 
-function sectionKV(ctx: Pg, title: string, rows: [string, string][]) { secTitle(ctx, title); infoTable(ctx, rows); }
+function sectionKV(ctx: Pg, title: string, rows: [string, string][], lw = 120) { secTitle(ctx, title); infoTable(ctx, rows, lw); }
+
+/* ════════════════════════════════════════════════════
+   IMAGE PREPROCESSING – resize stamp for PDF embedding
+   ════════════════════════════════════════════════════ */
+
+const STAMP_MAX_PX = 300;
+
+async function preprocessStamp(dataUrl: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const { width, height } = img;
+      if (width <= STAMP_MAX_PX) { resolve(dataUrl); return; }
+      const scale = STAMP_MAX_PX / width;
+      const canvas = document.createElement("canvas");
+      canvas.width = STAMP_MAX_PX;
+      canvas.height = Math.round(height * scale);
+      const ctx2d = canvas.getContext("2d");
+      if (!ctx2d) { resolve(dataUrl); return; }
+      ctx2d.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const resized = canvas.toDataURL("image/png");
+      resolve(resized);
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
 
 /* ════════════════════════════════════════════════════
    SECTION RENDERERS
@@ -313,7 +382,8 @@ function renderS8(ctx: Pg) {
 
 function renderS9(ctx: Pg, s: SdsSettings) {
   const pp = s.physical_properties;
-  sectionKV(ctx, "SECTION 9 — Physical and Chemical Properties", [
+  secTitle(ctx, "SECTION 9 — Physical and Chemical Properties");
+  infoTable(ctx, [
     ["Appearance", pp.appearance],
     ["Odor", pp.odor],
     ["Odor Threshold", pp.odor_threshold],
@@ -332,7 +402,7 @@ function renderS9(ctx: Pg, s: SdsSettings) {
     ["Autoignition Temperature", pp.autoignition_temperature],
     ["Decomposition Temperature", pp.decomposition_temperature],
     ["Viscosity", pp.viscosity],
-  ]);
+  ], 190); // wider label column for long property names
 }
 
 function renderS10(ctx: Pg) {
@@ -442,7 +512,7 @@ function renderS16(ctx: Pg, s: SdsSettings) {
    PRODUCT SDS (7 pages)
    ════════════════════════════════════════════════════ */
 
-function genProductSDS(product: ParsedProduct, s: SdsSettings, bottle?: string): jsPDF {
+function genProductSDS(product: ParsedProduct, s: SdsSettings, stampDataUrl: string, bottle?: string): jsPDF {
   const ki = s.kit_info;
   const doc = new jsPDF({ format: "letter", unit: "pt" });
   const ctx = new Pg(doc, product.product_name, ki.version, ki.issue_date, ki.supplier_name, 7, bottle);
@@ -474,18 +544,13 @@ function genProductSDS(product: ParsedProduct, s: SdsSettings, bottle?: string):
   ctx.y = y;
   renderS1(ctx, product, s);
 
-  // Stamp image – floating overlay, top-right, no border/background
-  if (ki.company_stamp_data_url) {
+  // Stamp image – floating overlay on page 1 only, top-right area
+  if (stampDataUrl) {
     try {
-      const parts = ki.company_stamp_data_url.split(",");
+      const parts = stampDataUrl.split(",");
       if (parts.length === 2) {
-        const stamp_w = 76;
-        const stamp_x = 500;
-        const stamp_y = 62;
-        // Preserve aspect ratio: typical stamp/signature ~ 2:1 width:height
-        const stamp_h = 40;
-        // Draw directly - no border, no white background, rgba PNG transparent
-        d.addImage(parts[1], "PNG", stamp_x, stamp_y, stamp_w, stamp_h);
+        const sx = 495, sy = 58, sw = 80, sh = 42;
+        d.addImage(parts[1], "PNG", sx, sy, sw, sh);
       }
     } catch { /* ignore */ }
   }
@@ -606,37 +671,57 @@ async function docBytes(doc: jsPDF): Promise<Uint8Array> {
   const b = doc.output("blob"); const ab = await b.arrayBuffer(); return new Uint8Array(ab);
 }
 
-export async function generate_package_merged(prods: ParsedProduct[], s: SdsSettings): Promise<Blob> {
+export async function generate_package_merged(
+  prods: ParsedProduct[], s: SdsSettings, stampUrl: string
+): Promise<Blob> {
   const btls = ["Bottle 1", "Bottle 2", "Bottle 3"];
   const cov = genPackageCover(prods, s);
   const covB = await docBytes(cov);
-  const pB = await Promise.all(prods.map((p, i) => genProductSDS(p, s, btls[i] || undefined)).map(docBytes));
+  const pB = await Promise.all(
+    prods.map((p, i) => genProductSDS(p, s, stampUrl, btls[i] || undefined)).map(docBytes)
+  );
   const mg = await PDFDocument.create();
   for (const bytes of [covB, ...pB]) {
     const src = await PDFDocument.load(bytes);
     const pgs = await mg.copyPages(src, src.getPageIndices());
     for (const pg of pgs) mg.addPage(pg);
   }
-  const out = await mg.save();
+  const out = await mg.save({ useObjectStreams: true });
+
+  // Size check
+  if (out.byteLength > MAX_PAGE_SIZE) {
+    throw new Error(
+      `PDF size is ${(out.byteLength / 1024 / 1024).toFixed(1)}MB, exceeds ${(MAX_PAGE_SIZE / 1024 / 1024).toFixed(0)}MB limit. Please reduce stamp image size or remove it.`
+    );
+  }
+
   return new Blob([out as unknown as BlobPart], { type: "application/pdf" });
 }
 
 export async function generate_all_sds_outputs(prods: ParsedProduct[], s: SdsSettings) {
   const zip = new JSZip();
   const btls = ["Bottle 1", "Bottle 2", "Bottle 3"];
+
+  // Preprocess stamp image – resize for PDF embedding, single time
+  let stampUrl = "";
+  if (s.kit_info.company_stamp_data_url) {
+    stampUrl = await preprocessStamp(s.kit_info.company_stamp_data_url);
+  }
+
   const pdfs: { product_name: string; blob: Blob }[] = [];
 
   for (let i = 0; i < prods.length; i++) {
-    const doc = genProductSDS(prods[i], s, btls[i] || undefined);
+    const doc = genProductSDS(prods[i], s, stampUrl, btls[i] || undefined);
     const blob = doc.output("blob");
     const safe = prods[i].product_name.replace(/[^a-zA-Z0-9_-]/g, "_");
     pdfs.push({ product_name: safe, blob });
     zip.file(`${safe}_SDS.pdf`, blob);
   }
 
-  const pkg = await generate_package_merged(prods, s);
+  const pkg = await generate_package_merged(prods, s, stampUrl);
   const kn = s.kit_info.kit_name.replace(/[^a-zA-Z0-9_-]/g, "_");
   zip.file(`${kn}_SDS_Package.pdf`, pkg);
 
-  return { product_pdfs: pdfs, package_pdf_blob: pkg, zip_blob: await zip.generateAsync({ type: "blob" }) };
+  const zipBlob = await zip.generateAsync({ type: "blob" });
+  return { product_pdfs: pdfs, package_pdf_blob: pkg, zip_blob: zipBlob };
 }
