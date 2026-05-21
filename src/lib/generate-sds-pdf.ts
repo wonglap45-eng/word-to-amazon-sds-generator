@@ -215,6 +215,18 @@ function bodyP(ctx: Pg, text: string, fs = 7) {
   for (const l of ls) { ctx.es(fs + 4); d.text(l, M + 2, ctx.y + fs); ctx.y += fs + 3; }
 }
 
+/** Draw wrapped paragraph text returning the height used. FS=fontSize, LH=lineHeight */
+function bodyWrapped(ctx: Pg, text: string, fs = 7, lh = 8.5, x = M + PAD + 2) {
+  const d = ctx.doc;
+  d.setTextColor(...BK); d.setFontSize(fs); d.setFont("helvetica", "normal");
+  const lines = d.splitTextToSize(text, CW - PAD * 2 - 4);
+  const totalH = lines.length * lh;
+  ctx.es(totalH);
+  let yy = ctx.y + lh * 0.7;
+  for (const l of lines) { d.text(l, x, yy); yy += lh; }
+  ctx.y += totalH + 2;
+}
+
 function sectionKV(ctx: Pg, title: string, rows: [string, string][], lw = 120) { secTitle(ctx, title); infoTable(ctx, rows, lw); }
 
 /* ════════════════════════════════════════════════════
@@ -665,21 +677,15 @@ function genPackageCover(prods: ParsedProduct[], s: SdsSettings): jsPDF {
 
   // Document Purpose
   secTitle(ctx, "Document Purpose");
-  d.setTextColor(...BK); d.setFontSize(7); d.setFont("helvetica", "normal");
-  d.text("This Safety Data Sheet Package is prepared to meet Amazon marketplace requirements for chemical product documentation. It provides comprehensive safety information for each liquid component in the Golf Club Cleaning Kit.", M + PAD + 2, ctx.y + 7);
-  ctx.y += 14;
+  bodyWrapped(ctx, "This Safety Data Sheet Package is prepared to meet Amazon marketplace requirements for chemical product documentation. It provides comprehensive safety information for each liquid component in the Golf Club Cleaning Kit.", 7, 8);
 
   // Kit Components Statement
   secTitle(ctx, "Kit Components Statement");
-  d.setTextColor(...BK); d.setFontSize(7);
-  d.text(`The Golf Club Cleaning Kit (ASIN: ${ki.asin}) contains three independently formulated liquid components. Each component has been documented with its own Safety Data Sheet containing 16 standardized sections per GHS/UN 16th Edition (2026).`, M + PAD + 2, ctx.y + 7);
-  ctx.y += 14;
+  bodyWrapped(ctx, `The Golf Club Cleaning Kit (ASIN: ${ki.asin}) contains three independently formulated liquid components. Each component has been documented with its own Safety Data Sheet containing 16 standardized sections per GHS/UN 16th Edition (2026).`, 7, 8);
 
   // Amazon SDS Review Note
   secTitle(ctx, "Amazon SDS Review Note");
-  d.setTextColor(...BK); d.setFontSize(7);
-  d.text("These SDS documents have been formatted to comply with Amazon's Safety Data Sheet requirements for chemical products sold on Amazon.com. All ingredients are disclosed with CAS numbers and percentage composition. Hazard classification follows GHS UN 16th Edition criteria.", M + PAD + 2, ctx.y + 7);
-  ctx.y += 14;
+  bodyWrapped(ctx, "These SDS documents have been formatted to comply with Amazon's Safety Data Sheet requirements for chemical products sold on Amazon.com. All ingredients are disclosed with CAS numbers and percentage composition. Hazard classification follows GHS UN 16th Edition criteria.", 7, 8);
 
   sectionKV(ctx, "PACKAGE NOTE", [
     ["Purpose", "This PDF package contains separate Safety Data Sheets for each liquid component. The three components have different formulations and are documented separately for Amazon SDS review."],
@@ -690,8 +696,7 @@ function genPackageCover(prods: ParsedProduct[], s: SdsSettings): jsPDF {
 
   ctx.y += 4;
   secTitle(ctx, "Supplier Declaration");
-  d.setTextColor(...BK); d.setFontSize(7); d.setFont("helvetica", "normal");
-  d.text(`The supplier ${ki.supplier_name} certifies that the information provided in these Safety Data Sheets is accurate to the best of knowledge and complies with applicable regulations for Amazon marketplace.`, M + PAD + 2, ctx.y + 7);
+  bodyWrapped(ctx, `The supplier ${ki.supplier_name} certifies that the information provided in these Safety Data Sheets is accurate to the best of knowledge and complies with applicable regulations for Amazon marketplace.`, 7, 8);
   ctx.y += 14;
 
   ctx.fixupFooters();
