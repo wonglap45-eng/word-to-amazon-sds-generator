@@ -17,9 +17,19 @@ import { lookup_cas } from "@/lib/cas-lookup";
 /* ───── Regex patterns ───── */
 
 /**
- * Section header: "3.1 GOLF GRIP CLEANER"
+ * Section header: "3.1 GOLF GRIP CLEANER" (multi-product format)
  */
 const SECTION_RE = /^(\d+\.\d+)\s+(.+)$/;
+
+/**
+ * Composition section marker: "3. COMPOSITION / INFORMATION ON INGREDIENTS"
+ */
+const COMPOSITION_HEADER_RE = /^\d+[\.\s]+composition/i;
+
+/**
+ * Product name label in identification table
+ */
+const PRODUCT_NAME_LABEL_RE = /product\s+name|产品名称/i;
 
 /**
  * A line that looks like a percentage value: "82%", "6.5%"
@@ -71,6 +81,112 @@ function post_process_product(product: ParsedProduct): void {
     if (ing.percentage !== null) total += ing.percentage;
   }
   product.percentage_total = Math.round(total * 100) / 100;
+}
+
+/* ───── Single-product fallback parser ───── */
+
+/**
+ * Parse a single-product document which doesn't have "3.1 ProductName" sections.
+ * Format:
+ *   1. PRODUCT AND COMPANY IDENTIFICATION
+ *   [identification table with Product Name, Manufacturer, etc.]
+ *   3. COMPOSITION / INFORMATION ON INGREDIENTS
+ *   [composition table header rows]
+ *   [ingredient rows: chem name → blank lines → percentage]
+ */
+function try_single_product_fallback(raw_text: string): ParsedProduct | null {
+  const lines = raw_text.split("\n");
+  let product_name = "";
+
+  // Stage 1: Find product name
+  // Look for "Product Name" or "产品名称" label, then take the next content line
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (PRODUCT_NAME_LABEL_RE.test(trimmed)) {
+      // The product name is typically 0-3 lines after the label
+      for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+        const next = lines[j].trim();
+        if (next && !/product|manufacturer|address|e-mail|tel|post|phone|brand|asin/i.test(next)) {
+          product_name = next;
+          break;
+        }
+      }
+      break;
+    }
+  }
+
+  if (!product_name) return null;
+
+  // Stage 2: Find composition section and parse ingredients
+  let in_composition = false;
+  let ing_waiting_pct = false;
+  let ing_chem = "";
+  let ing_cas = "";
+
+  const product: ParsedProduct = {
+    section: "1.0",
+    product_name,
+    ingredients: [],
+    percentage_total: 0,
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+
+    // Detect composition section header
+    if (COMPOSITION_HEADER_RE.test(trimmed)) {
+      in_composition = true;
+      continue;
+    }
+
+    if (!in_composition) continue;
+
+    // Skip annotation/header lines
+    if (is_skip_line(trimmed) || !trimmed) continue;
+
+    // Parse ingredient data (same logic as main parser)
+    if (PCT_LINE_RE.test(trimmed)) {
+      if (ing_waiting_pct && ing_chem) {
+        const pct = parse_percentage(trimmed);
+        product.ingredients.push({
+          chemical_composition: ing_chem.trim(),
+          cas_number: ing_cas.trim(),
+          percentage: pct,
+          percentage_raw: trimmed,
+        });
+        ing_waiting_pct = false;
+        ing_chem = "";
+        ing_cas = "";
+      }
+      continue;
+    }
+
+    // CAS number between name and percentage
+    if (!ing_waiting_pct) {
+      ing_chem = trimmed;
+      ing_cas = "";
+      ing_waiting_pct = true;
+    } else {
+      if (looks_like_cas(trimmed)) {
+        ing_cas = trimmed;
+      }
+    }
+  }
+
+  // Finalize last ingredient
+  if (ing_waiting_pct && ing_chem) {
+    product.ingredients.push({
+      chemical_composition: ing_chem.trim(),
+      cas_number: ing_cas.trim(),
+      percentage: null,
+      percentage_raw: "",
+    });
+  }
+
+  if (product.ingredients.length === 0) return null;
+
+  post_process_product(product);
+  return product;
 }
 
 /* ───── Main parsing ───── */
@@ -261,6 +377,16 @@ export function parse_products(raw_text: string): ParsedSdsData {
   if (current_product) {
     post_process_product(current_product);
     products.push(current_product);
+  }
+
+  // ── Fallback: single-product document ──
+  // If no products were detected via the standard section pattern,
+  // try the single-product format (e.g. "1. PRODUCT AND COMPANY IDENTIFICATION")
+  if (products.length === 0) {
+    const fallback = try_single_product_fallback(raw_text);
+    if (fallback) {
+      products.push(fallback);
+    }
   }
 
   // ── Auto-fill missing CAS numbers from lookup table ──
