@@ -260,24 +260,31 @@ async function preprocessStamp(dataUrl: string): Promise<string> {
    SECTION RENDERERS
    ════════════════════════════════════════════════════ */
 
-function renderS1(ctx: Pg, product: ParsedProduct, s: SdsSettings) {
+function renderS1(ctx: Pg, product: ParsedProduct, s: SdsSettings, isKit: boolean) {
   const ki = s.kit_info;
   const addr = ki.address || "No.37 Zhengzhuang Village, Xieqiao Town, Yingshang County, Fuyang City, Anhui Province, 236000";
   const tel = ki.telephone || "+86 13178739270";
   const em = ki.email || "songping3544@outlook.com";
 
-  secTitle(ctx, "SECTION 1 — Identification of the Substance / Mixture and the Company / Undertaking");
-  infoTable(ctx, [
+  const rows: [string, string][] = [
     ["Product Name", product.product_name],
-    ["Recommended Use", "Professional and household cleaning agent for golf clubs, grips, shafts. Removes dirt, grass stains, mud, and light oil from golf club surfaces."],
+    ["Recommended Use", ki.recommended_use || "Professional and household cleaning agent. Refer to product label for specific application."],
     ["ASIN (Amazon)", ki.asin],
-    ["Kit Component", ctx.bottle || product.product_name],
+  ];
+  // Only show Kit Component for multi-product kits
+  if (isKit) {
+    rows.push(["Kit Component", ctx.bottle || product.product_name]);
+  }
+  rows.push(
     ["Supplier Name", ki.supplier_name],
     ["Address", addr],
     ["Telephone", tel],
     ["E-mail", em],
     ["Emergency Telephone", ki.emergency_telephone || tel],
-  ], 110);
+  );
+
+  secTitle(ctx, "SECTION 1 — Identification of the Substance / Mixture and the Company / Undertaking");
+  infoTable(ctx, rows, 110);
 }
 
 function renderS2(ctx: Pg) {
@@ -541,7 +548,7 @@ function renderS16(ctx: Pg, s: SdsSettings) {
   infoTable(ctx, [
     ["Preparation Date", ki.issue_date],
     ["Version", `${ki.version} (2026 International SDS Standard)`],
-    ["Report Number", `${ki.report_number_prefix}-${ctx.bottle ? "LC" + ctx.bottle.replace("Bottle ", "") : "00"}-${ki.issue_date.replace(/-/g, "")}`],
+    ["Report Number", `${ki.report_number_prefix}-SDS-${ki.issue_date.replace(/-/g, "")}`],
     ["Prepared by", `Quality & Safety Department, ${ki.supplier_name}`],
     ["Key Literature Data", "Internal safety tests, supplier ingredient data, GHS 2026 guidelines."],
   ], 100);
@@ -556,7 +563,7 @@ function renderS16(ctx: Pg, s: SdsSettings) {
    PRODUCT SDS (7 pages)
    ════════════════════════════════════════════════════ */
 
-function genProductSDS(product: ParsedProduct, s: SdsSettings, stampDataUrl: string, bottle?: string): jsPDF {
+function genProductSDS(product: ParsedProduct, s: SdsSettings, stampDataUrl: string, isKit: boolean, bottle?: string): jsPDF {
   const ki = s.kit_info;
   const doc = new jsPDF({ format: "letter", unit: "pt" });
   const ctx = new Pg(doc, product.product_name, ki.version, ki.issue_date, ki.supplier_name, bottle);
@@ -574,19 +581,19 @@ function genProductSDS(product: ParsedProduct, s: SdsSettings, stampDataUrl: str
   // Report bar
   d.setFillColor(...LB); d.rect(M, y, CW, 20, "F");
   d.setFontSize(7.5); d.setTextColor(...BK);
-  const rn = `${ki.report_number_prefix}-${bottle ? "LC" + bottle.replace("Bottle ", "") : product.section.replace(".", "")}-${ki.issue_date.replace(/-/g, "")}`;
+  const rn = `${ki.report_number_prefix}-${isKit && bottle ? "LC" + bottle.replace("Bottle ", "") : "SDS"}-${ki.issue_date.replace(/-/g, "")}`;
   d.text(`Report No.: ${rn}    |    Date: ${ki.issue_date}`, M + 8, y + 13);
   y += 26;
 
-  // Bottle label
-  if (bottle) {
+  // Bottle label — only for multi-product kits
+  if (isKit && bottle) {
     d.setFontSize(9); d.setFont("helvetica", "bold"); d.setTextColor(...DB);
     d.text(`${bottle} / ${product.product_name}`, M, y);
     y += 12;
   }
 
   ctx.y = y;
-  renderS1(ctx, product, s);
+  renderS1(ctx, product, s, isKit);
   renderS2(ctx);
 
   // ── PAGE 2: Sections 3 + 4 + 5 + 6 ──
@@ -647,7 +654,7 @@ function genPackageCover(prods: ParsedProduct[], s: SdsSettings): jsPDF {
   d.text("SAFETY DATA SHEET PACKAGE", W / 2, y, { align: "center" });
   y += 16;
   d.setFontSize(9); d.setFont("helvetica", "normal"); d.setTextColor(...GR);
-  d.text(`${ki.kit_name} — Three Liquid Components`, W / 2, y, { align: "center" });
+  d.text(`${ki.kit_name} — ${prods.length} Liquid Components`, W / 2, y, { align: "center" });
   y += 10;
   d.setFontSize(7.5); d.setTextColor(...GR);
   const rn = `${ki.report_number_prefix}-PACKAGE-${ki.issue_date.replace(/-/g, "")}`;
@@ -666,7 +673,7 @@ function genPackageCover(prods: ParsedProduct[], s: SdsSettings): jsPDF {
   const btls = ["Bottle 1", "Bottle 2", "Bottle 3"];
   dataTable(ctx, ["Kit Component", "Product Name", "Report No."],
     prods.map((p, i) => [
-      btls[i] || `Bottle ${i + 1}`,
+      btls[i] || `Component ${i + 1}`,
       p.product_name,
       `${ki.report_number_prefix}-LC${i + 1}-${ki.issue_date.replace(/-/g, "")}`,
     ]),
@@ -677,11 +684,11 @@ function genPackageCover(prods: ParsedProduct[], s: SdsSettings): jsPDF {
 
   // Document Purpose
   secTitle(ctx, "Document Purpose");
-  bodyWrapped(ctx, "This Safety Data Sheet Package is prepared to meet Amazon marketplace requirements for chemical product documentation. It provides comprehensive safety information for each liquid component in the Golf Club Cleaning Kit.", 7, 8);
+  bodyWrapped(ctx, `This Safety Data Sheet Package is prepared to meet Amazon marketplace requirements for chemical product documentation. It provides comprehensive safety information for each liquid component in the ${ki.kit_name}.`, 7, 8);
 
   // Kit Components Statement
   secTitle(ctx, "Kit Components Statement");
-  bodyWrapped(ctx, `The Golf Club Cleaning Kit (ASIN: ${ki.asin}) contains three independently formulated liquid components. Each component has been documented with its own Safety Data Sheet containing 16 standardized sections per GHS/UN 16th Edition (2026).`, 7, 8);
+  bodyWrapped(ctx, `The ${ki.kit_name} (ASIN: ${ki.asin}) contains ${prods.length} independently formulated liquid components. Each component has been documented with its own Safety Data Sheet containing 16 standardized sections per GHS/UN 16th Edition (2026).`, 7, 8);
 
   // Amazon SDS Review Note
   secTitle(ctx, "Amazon SDS Review Note");
@@ -735,14 +742,25 @@ async function docBytes(doc: jsPDF): Promise<Uint8Array> {
 export async function generate_package_merged(
   prods: ParsedProduct[], s: SdsSettings, stampUrl: string
 ): Promise<Blob> {
+  const isKit = prods.length > 1;
   const btls = ["Bottle 1", "Bottle 2", "Bottle 3"];
-  const cov = genPackageCover(prods, s);
-  const covB = await docBytes(cov);
+  const parts: Uint8Array[] = [];
+
+  // Only add package cover for multi-product kits
+  if (isKit) {
+    const cov = genPackageCover(prods, s);
+    parts.push(await docBytes(cov));
+  }
+
   const pB = await Promise.all(
-    prods.map((p, i) => genProductSDS(p, s, stampUrl, btls[i] || undefined)).map(docBytes)
+    prods.map((p, i) =>
+      genProductSDS(p, s, stampUrl, isKit, isKit ? btls[i] : undefined)
+    ).map(docBytes)
   );
+  parts.push(...pB);
+
   const mg = await PDFDocument.create();
-  for (const bytes of [covB, ...pB]) {
+  for (const bytes of parts) {
     const src = await PDFDocument.load(bytes);
     const pgs = await mg.copyPages(src, src.getPageIndices());
     for (const pg of pgs) mg.addPage(pg);
@@ -761,6 +779,7 @@ export async function generate_package_merged(
 
 export async function generate_all_sds_outputs(prods: ParsedProduct[], s: SdsSettings) {
   const zip = new JSZip();
+  const isKit = prods.length > 1;
   const btls = ["Bottle 1", "Bottle 2", "Bottle 3"];
 
   // Preprocess stamp image – resize for PDF embedding, single time
@@ -772,16 +791,20 @@ export async function generate_all_sds_outputs(prods: ParsedProduct[], s: SdsSet
   const pdfs: { product_name: string; blob: Blob }[] = [];
 
   for (let i = 0; i < prods.length; i++) {
-    const doc = genProductSDS(prods[i], s, stampUrl, btls[i] || undefined);
+    const doc = genProductSDS(prods[i], s, stampUrl, isKit, isKit ? btls[i] : undefined);
     const blob = doc.output("blob");
     const safe = prods[i].product_name.replace(/[^a-zA-Z0-9_-]/g, "_");
     pdfs.push({ product_name: safe, blob });
     zip.file(`${safe}_SDS.pdf`, blob);
   }
 
-  const pkg = await generate_package_merged(prods, s, stampUrl);
-  const kn = s.kit_info.kit_name.replace(/[^a-zA-Z0-9_-]/g, "_");
-  zip.file(`${kn}_SDS_Package.pdf`, pkg);
+  // Only generate package cover for multi-product kits
+  let pkg: Blob | null = null;
+  if (isKit) {
+    pkg = await generate_package_merged(prods, s, stampUrl);
+    const kn = s.kit_info.kit_name.replace(/[^a-zA-Z0-9_-]/g, "_");
+    zip.file(`${kn}_SDS_Package.pdf`, pkg);
+  }
 
   const zipBlob = await zip.generateAsync({ type: "blob" });
   return { product_pdfs: pdfs, package_pdf_blob: pkg, zip_blob: zipBlob };

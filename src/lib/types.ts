@@ -78,6 +78,8 @@ export interface SdsKitInfo {
   issue_date: string;
   version: string;
   report_number_prefix: string;
+  /** Product recommended use / intended application */
+  recommended_use: string;
   /** Base64 data URL of the company stamp / signature image */
   company_stamp_data_url: string;
 }
@@ -144,6 +146,7 @@ export const DEFAULT_SDS_SETTINGS: SdsSettings = {
     issue_date: new Date().toISOString().split("T")[0],
     version: "1.0",
     report_number_prefix: "SDS-GCCK",
+    recommended_use: "",
     company_stamp_data_url: "",
   },
   physical_properties: {

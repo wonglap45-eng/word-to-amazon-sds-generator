@@ -36,7 +36,7 @@ export function GenerateSdsView({
   const [error, set_error] = useState<string>("");
   const [downloads, set_downloads] = useState<{
     product_pdfs: { product_name: string; blob: Blob }[];
-    package_pdf_blob: Blob;
+    package_pdf_blob: Blob | null;
     zip_blob: Blob;
   } | null>(null);
 
@@ -242,7 +242,8 @@ export function GenerateSdsView({
               </CardContent>
             </Card>
 
-            {/* Download Package PDF */}
+            {/* Download Package PDF — only for multi-product kits */}
+            {downloads.package_pdf_blob && (
             <Card className="hover:border-primary/50 transition-colors">
               <CardHeader className="pb-2">
                 <CardTitle className="text-xs font-medium text-muted-foreground">
@@ -256,7 +257,7 @@ export function GenerateSdsView({
                   className="w-full justify-start text-xs gap-2"
                   onClick={() =>
                     download_blob(
-                      downloads.package_pdf_blob,
+                      downloads.package_pdf_blob!,
                       `${kit_name_safe}_SDS_Package.pdf`
                     )
                   }
@@ -266,6 +267,7 @@ export function GenerateSdsView({
                 </Button>
               </CardContent>
             </Card>
+            )}
 
             {/* Download ZIP */}
             <Card className="hover:border-primary/50 transition-colors">
