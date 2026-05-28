@@ -126,6 +126,9 @@ function infoTable(ctx: Pg, rows: [string, string][], lw = 120, fs = 6.8, lh = 8
   const vw = CW - lw;
 
   for (const [k, v] of rows) {
+    // Skip rows with N/A value
+    if (v.trim().toUpperCase() === "N/A") continue;
+
     const kLines = d.splitTextToSize(k, lw - PAD * 2);
     const vLines = d.splitTextToSize(v || "—", vw - PAD * 2);
     const nLines = Math.max(kLines.length, vLines.length, 1);
@@ -335,8 +338,8 @@ function renderS2(ctx: Pg) {
   ctx.y += 16;
 
   infoTable(ctx, [
-    ["Physical Hazards", "Non-flammable liquid. No explosive or oxidizing properties."],
-    ["Health Hazards", "May cause mild eye irritation. Low acute toxicity."],
+    ["Physical Hazards", "0"],
+    ["Health Hazards", "0"],
   ], 90);
 }
 
@@ -387,7 +390,7 @@ function renderS4(ctx: Pg) {
   infoTable(ctx, [
     ["Inhalation", "Remove to fresh air. If breathing is difficult, call a physician."],
     ["Skin Contact", "Wash with plenty of soap and water. Remove contaminated clothing. Seek medical attention if irritation develops."],
-    ["Eye Contact", "Rinse cautiously with water for 15-20 minutes. Remove contact lenses if present. Call an ophthalmologist if irritation persists."],
+    ["Eye Contact", "Under normal circumstances will not cause irritate."],
     ["Ingestion", "Rinse mouth. Do NOT induce vomiting. Call a poison control center or doctor immediately."],
     ["Most Important Symptoms", "Mild eye/skin irritation; no known delayed health effects."],
     ["Indication of Medical Attention", "Treat symptomatically. No specific antidote."],
@@ -469,9 +472,8 @@ function renderS10(ctx: Pg) {
 
 function renderS11(ctx: Pg) {
   sectionKV(ctx, "SECTION 11 — Toxicological Information", [
-    ["Acute Toxicity", "Low toxicity; no lethal dose data available for normal use."],
-    ["Skin Corrosion/Irritation", "Mildly irritating to sensitive skin. No classification required."],
-    ["Eye Damage/Irritation", "May cause mild reversible eye irritation."],
+    ["Acute Toxicity", "No known significant effects or serious harm."],
+    ["Eye Damage/Irritation", "Under normal circumstances will not cause irritate."],
     ["Sensitization", "No skin sensitization expected."],
     ["Germ Cell Mutagenicity", "No data indicating mutagenic potential."],
     ["Carcinogenicity", "No ingredients listed as carcinogens by IARC, NTP, or OSHA."],
@@ -484,9 +486,8 @@ function renderS11(ctx: Pg) {
 
 function renderS12(ctx: Pg) {
   sectionKV(ctx, "SECTION 12 — Ecological Information", [
-    ["Aquatic Toxicity", "Low aquatic toxicity expected based on component data."],
-    ["Persistence/Degradability", "Readily biodegradable. Surfactants meet OECD criteria."],
-    ["Bioaccumulative Potential", "Low bioaccumulation potential."],
+    ["Persistence/Degradability", "No information"],
+    ["Bioaccumulative Potential", "No information"],
     ["Mobility in Soil", "High water solubility; low soil adsorption."],
     ["Other Adverse Effects", "Do not release into environment. Safe for household drainage after dilution."],
   ]);
