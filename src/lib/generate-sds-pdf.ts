@@ -352,7 +352,7 @@ function renderS3(ctx: Pg, product: ParsedProduct) {
   d.text("Type:", M + 2, ctx.y + 7);
   d.setFont("helvetica", "normal");
   d.setTextColor(...BK);
-  d.text("Mixture (Water-based cleaning solution, pH 5.5, transparent liquid)", M + 35, ctx.y + 7);
+  d.text("Mixture", M + 35, ctx.y + 7);
   ctx.y += 14;
 
   const rows = product.ingredients.map((ing, i) => [
@@ -381,7 +381,7 @@ function renderS3(ctx: Pg, product: ParsedProduct) {
   d.setFont("helvetica", "bold"); d.setFontSize(7); d.setTextColor(...DB);
   d.text("Mixture Description:", M + 2, ctx.y + 6);
   d.setFont("helvetica", "normal"); d.setTextColor(...BK);
-  d.text("Water-based mild cleaning solution, pH 5.5, transparent liquid, non-irritating odor. All surfactants used are readily biodegradable.", M + 90, ctx.y + 6);
+  d.text("Refer to Section 9 for physical and chemical properties.", M + 90, ctx.y + 6);
   ctx.y += 14;
 }
 
