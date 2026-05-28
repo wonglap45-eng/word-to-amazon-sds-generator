@@ -424,15 +424,12 @@ export function parse_products(raw_text: string): ParsedSdsData {
   }
 
   // ── Fallback: single-product document ──
+  let extracted_info: ParsedSdsData["extracted_info"] | undefined;
   if (products.length === 0) {
     const fallback = try_single_product_fallback(raw_text);
     if (fallback) {
       products.push(fallback.product);
-      if (fallback.extracted_info) {
-        // Return early with extracted info so caller can use it
-        const result: ParsedSdsData = { products, raw_text, parsed_at: new Date().toISOString(), extracted_info: fallback.extracted_info };
-        return result;
-      }
+      extracted_info = fallback.extracted_info;
     }
   }
 
@@ -453,6 +450,7 @@ export function parse_products(raw_text: string): ParsedSdsData {
     products,
     raw_text,
     parsed_at: new Date().toISOString(),
+    ...(extracted_info ? { extracted_info } : {}),
   };
 }
 
