@@ -54,6 +54,14 @@ export interface ParsedSdsData {
   raw_text: string;
   /** Timestamp of parse */
   parsed_at: string;
+  /** Extracted identification info (from application form docs) */
+  extracted_info?: {
+    product_name?: string;
+    manufacturer_name?: string;
+    address?: string;
+    email?: string;
+    telephone?: string;
+  };
 }
 
 /* ───────── SDS Settings ───────── */

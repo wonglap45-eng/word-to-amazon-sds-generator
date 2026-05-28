@@ -94,24 +94,67 @@ function post_process_product(product: ParsedProduct): void {
  *   [composition table header rows]
  *   [ingredient rows: chem name → blank lines → percentage]
  */
-function try_single_product_fallback(raw_text: string): ParsedProduct | null {
+function try_single_product_fallback(raw_text: string): { product: ParsedProduct; extracted_info?: ParsedSdsData["extracted_info"] } | null {
   const lines = raw_text.split("\n");
   let product_name = "";
+  const info: NonNullable<ParsedSdsData["extracted_info"]> = {};
 
-  // Stage 1: Find product name
-  // Look for "Product Name" or "产品名称" label, then take the next content line
+  // Stage 1: Find product name + identification fields
+  // Look for "Product Name" or "产品名称" label
   for (let i = 0; i < lines.length; i++) {
     const trimmed = lines[i].trim();
+    if (!trimmed) continue;
+
     if (PRODUCT_NAME_LABEL_RE.test(trimmed)) {
-      // The product name is typically 0-3 lines after the label
       for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
         const next = lines[j].trim();
-        if (next && !/product|manufacturer|address|e-mail|tel|post|phone|brand|asin/i.test(next)) {
+        if (next && !/product|manufacturer|address|e-mail|tel|phone|post|brand|asin/i.test(next)) {
           product_name = next;
+          info.product_name = next;
           break;
         }
       }
-      break;
+    }
+
+    // Extract other identification fields
+    if (/manufacturer\s*(name|名称)?/i.test(trimmed)) {
+      for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+        const next = lines[j].trim();
+        if (next && next.length > 3 && !/manufacturer|name|name:|申请方/i.test(next)) {
+          info.manufacturer_name = next;
+          break;
+        }
+      }
+    }
+
+    if (/address|地址/i.test(trimmed)) {
+      for (let j = i + 1; j < Math.min(i + 8, lines.length); j++) {
+        const next = lines[j].trim();
+        if (next && next.length > 5 && !/address|地址/i.test(next)) {
+          info.address = next;
+          break;
+        }
+      }
+    }
+
+    if (/e-mail|mail:|邮箱/i.test(trimmed)) {
+      for (let j = i + 1; j < Math.min(i + 3, lines.length); j++) {
+        const next = lines[j].trim();
+        if (next && next.includes("@")) {
+          info.email = next;
+          break;
+        }
+      }
+    }
+
+    if (/tel|phone|手机|电话/i.test(trimmed)) {
+      for (let j = i + 1; j < Math.min(i + 3, lines.length); j++) {
+        const next = lines[j].trim();
+        if (next && /\d/.test(next) && next.length > 5) {
+          info.telephone = next;
+          break;
+        }
+      }
     }
   }
 
@@ -186,7 +229,8 @@ function try_single_product_fallback(raw_text: string): ParsedProduct | null {
   if (product.ingredients.length === 0) return null;
 
   post_process_product(product);
-  return product;
+  const hasInfo = info.product_name || info.manufacturer_name || info.address || info.email || info.telephone;
+  return { product, extracted_info: hasInfo ? info : undefined };
 }
 
 /* ───── Main parsing ───── */
@@ -380,12 +424,15 @@ export function parse_products(raw_text: string): ParsedSdsData {
   }
 
   // ── Fallback: single-product document ──
-  // If no products were detected via the standard section pattern,
-  // try the single-product format (e.g. "1. PRODUCT AND COMPANY IDENTIFICATION")
   if (products.length === 0) {
     const fallback = try_single_product_fallback(raw_text);
     if (fallback) {
-      products.push(fallback);
+      products.push(fallback.product);
+      if (fallback.extracted_info) {
+        // Return early with extracted info so caller can use it
+        const result: ParsedSdsData = { products, raw_text, parsed_at: new Date().toISOString(), extracted_info: fallback.extracted_info };
+        return result;
+      }
     }
   }
 
