@@ -61,6 +61,13 @@ export interface ParsedSdsData {
     address?: string;
     email?: string;
     telephone?: string;
+    /** Physical properties extracted from doc */
+    color?: string;
+    odor?: string;
+    flash_point?: string;
+    ph_value?: string;
+    appearance?: string;
+    brand?: string;
   };
 }
 
@@ -153,21 +160,21 @@ export const DEFAULT_SDS_SETTINGS: SdsSettings = {
     appearance: "Liquid",
     odor: "Odorless",
     odor_threshold: "Not determined",
-    ph: "",
-    melting_point: "Not determined",
-    boiling_point: "Not determined",
-    flash_point: "N/A",
-    evaporation_rate: "Not determined",
+    ph: "5.5",
+    melting_point: "~0°C",
+    boiling_point: "~100°C",
+    flash_point: "Non-flammable (no flash point)",
+    evaporation_rate: "Similar to water",
     flammability: "Non-flammable",
     explosion_limits: "Not applicable",
-    vapor_pressure: "Not determined",
+    vapor_pressure: "Similar to water",
     vapor_density: "Not determined",
-    relative_density: "Not determined",
-    solubility: "Not determined",
+    relative_density: "~1.0 g/cm³",
+    solubility: "Miscible with water",
     partition_coefficient: "Not determined",
     autoignition_temperature: "Not applicable",
     decomposition_temperature: "Not applicable",
-    viscosity: "Not determined",
+    viscosity: "Aqueous solution; similar to water",
   },
   transport_info: {
     un_number: "Not regulated for transport (UN3077 does not apply)",

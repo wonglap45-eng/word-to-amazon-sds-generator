@@ -138,18 +138,46 @@ export default function Home() {
       // Auto-fill settings from extracted identification info
       if (result.extracted_info) {
         const ei = result.extracted_info;
-        set_sds_settings((prev) => ({
-          ...prev,
-          kit_info: {
-            ...prev.kit_info,
-            kit_name: ei.product_name || prev.kit_info.kit_name,
-            supplier_name: ei.manufacturer_name || ei.product_name || prev.kit_info.supplier_name,
-            address: ei.address || prev.kit_info.address,
-            email: ei.email || prev.kit_info.email,
-            telephone: ei.telephone || prev.kit_info.telephone,
-            emergency_telephone: ei.telephone || prev.kit_info.emergency_telephone,
-          },
-        }));
+        set_sds_settings((prev) => {
+          const updated = {
+            ...prev,
+            kit_info: {
+              ...prev.kit_info,
+              kit_name: ei.product_name || prev.kit_info.kit_name,
+              supplier_name: ei.manufacturer_name || ei.product_name || prev.kit_info.supplier_name,
+              address: ei.address || prev.kit_info.address,
+              email: ei.email || prev.kit_info.email,
+              telephone: ei.telephone || prev.kit_info.telephone,
+              emergency_telephone: ei.telephone || prev.kit_info.emergency_telephone,
+            },
+          };
+          // Auto-fill physical properties from Word doc if extracted
+          if (ei.appearance || ei.color) {
+            updated.physical_properties = {
+              ...updated.physical_properties,
+              appearance: ei.appearance || ei.color || updated.physical_properties.appearance,
+            };
+          }
+          if (ei.odor) {
+            updated.physical_properties = {
+              ...updated.physical_properties,
+              odor: ei.odor,
+            };
+          }
+          if (ei.flash_point) {
+            updated.physical_properties = {
+              ...updated.physical_properties,
+              flash_point: ei.flash_point,
+            };
+          }
+          if (ei.ph_value) {
+            updated.physical_properties = {
+              ...updated.physical_properties,
+              ph: ei.ph_value,
+            };
+          }
+          return updated;
+        });
       }
     } catch (err) {
       console.error("Parse error:", err);

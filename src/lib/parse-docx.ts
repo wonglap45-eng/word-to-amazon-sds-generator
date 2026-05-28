@@ -156,6 +156,67 @@ function try_single_product_fallback(raw_text: string): { product: ParsedProduct
         }
       }
     }
+
+    // Extract physical properties from application form
+    if (/颜色|Color/i.test(trimmed)) {
+      for (let j = i + 1; j < Math.min(i + 3, lines.length); j++) {
+        const next = lines[j].trim();
+        if (next && !/color|颜色|flash|闪点|pH|外观|appear|气味|odor|brand|品牌|asin/i.test(next)) {
+          info.color = next;
+          break;
+        }
+      }
+    }
+
+    if (/气味|Odor\b/i.test(trimmed)) {
+      for (let j = i + 1; j < Math.min(i + 3, lines.length); j++) {
+        const next = lines[j].trim();
+        if (next && !/color|颜色|flash|闪点|pH|外观|appear|odor|气味|brand|品牌|asin/i.test(next)) {
+          info.odor = next;
+          break;
+        }
+      }
+    }
+
+    if (/闪点|Flash\s*Point/i.test(trimmed)) {
+      for (let j = i + 1; j < Math.min(i + 3, lines.length); j++) {
+        const next = lines[j].trim();
+        if (next && next.length > 0) {
+          info.flash_point = next;
+          break;
+        }
+      }
+    }
+
+    if (/PH\s*值|pH\s*值|pH\b/i.test(trimmed)) {
+      for (let j = i + 1; j < Math.min(i + 3, lines.length); j++) {
+        const next = lines[j].trim();
+        if (next && next.length > 0) {
+          info.ph_value = next;
+          break;
+        }
+      }
+    }
+
+    if (/外观|Appearance\s*(状态)?/i.test(trimmed)) {
+      for (let j = i + 1; j < Math.min(i + 3, lines.length); j++) {
+        const next = lines[j].trim();
+        if (next && !/color|颜色|flash|闪点|pH|外观|appear|气味|odor|brand|品牌|asin/i.test(next)) {
+          info.appearance = next;
+          break;
+        }
+      }
+    }
+
+    if (/brand|品牌/i.test(trimmed)) {
+      for (let j = i + 1; j < Math.min(i + 3, lines.length); j++) {
+        const next = lines[j].trim();
+        if (next && !/color|颜色|flash|闪点|pH|外观|appear|气味|odor|brand|品牌|asin/i.test(next)) {
+          info.brand = next;
+          break;
+        }
+      }
+    }
   }
 
   if (!product_name) return null;
